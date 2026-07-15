@@ -21,9 +21,13 @@ type MetricsRepository interface {
 	Store(ctx context.Context, metrics agent.Metrics) error
 }
 
-// LatestMetricsCache stores the most recent metric event for each host.
+// ErrCacheMiss is returned when a requested entry does not exist in the cache.
+var ErrCacheMiss = errors.New("cache miss")
+
+// LatestMetricsCache stores and retrieves the most recent metric event for each host.
 type LatestMetricsCache interface {
 	Store(ctx context.Context, metrics agent.Metrics) error
+	Get(ctx context.Context, hostname string) (agent.Metrics, error)
 }
 
 // EventAppender appends immutable infrastructure events to the event store.

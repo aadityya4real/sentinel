@@ -10,21 +10,16 @@ import (
 )
 
 // NewRouter creates the Sentinel HTTP router and registers its API endpoints.
-func NewRouter(metricsHandler *MetricsHandler, dashboardHandler *DashboardHandler, replayHandler *ReplayHandler, timeMachineHandler *TimeMachineHandler, aiHandler *AIHandler) http.Handler {
+func NewRouter(metricsHandler *MetricsHandler, eventsHandler *EventsHandler, dashboardHandler *DashboardHandler, replayHandler *ReplayHandler, timeMachineHandler *TimeMachineHandler, aiHandler *AIHandler, healthHandler *HealthHandler) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(15 * time.Second))
 
-	r.Get("/health", func(writer http.ResponseWriter, request *http.Request) {
-		writeJSON(writer, http.StatusOK, map[string]string{
-			"status":  "healthy",
-			"service": "sentinel",
-			"version": "0.1.0",
-		})
-	})
+	r.Get("/health", healthHandler.ServeHTTP)
 	r.Post("/v1/metrics", metricsHandler.ServeHTTP)
+	r.Post("/api/v1/events", eventsHandler.ServeHTTP)
 	r.Get("/v1/dashboard/overview", dashboardHandler.Overview)
 	r.Get("/v1/dashboard/hosts", dashboardHandler.Hosts)
 	r.Get("/v1/dashboard/hosts/{hostname}/metrics", dashboardHandler.History)

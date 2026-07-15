@@ -18,6 +18,7 @@ import (
 	"github.com/aadityya4real/sentinel/backend/internal/config"
 	"github.com/aadityya4real/sentinel/backend/internal/dashboard"
 	"github.com/aadityya4real/sentinel/backend/internal/database"
+	eventing "github.com/aadityya4real/sentinel/backend/internal/events"
 	"github.com/aadityya4real/sentinel/backend/internal/logger"
 	"github.com/aadityya4real/sentinel/backend/internal/redis"
 	"github.com/aadityya4real/sentinel/backend/internal/replay"
@@ -68,9 +69,17 @@ func main() {
 	if err != nil {
 		logg.Fatal("create Redis metrics cache", zap.Error(err))
 	}
+	latestEventCache, err := storage.NewRedisLatestEventCache(redisClient.Client)
+	if err != nil {
+		logg.Fatal("create Redis latest event cache", zap.Error(err))
+	}
 	events, err := storage.NewPostgreSQLEventStore(db.Pool)
 	if err != nil {
 		logg.Fatal("create PostgreSQL event store", zap.Error(err))
+	}
+	eventCollector, err := eventing.NewCollector(events, latestEventCache)
+	if err != nil {
+		logg.Fatal("create event collector", zap.Error(err))
 	}
 	replayEngine, err := replay.NewEngine(events)
 	if err != nil {
@@ -99,6 +108,10 @@ func main() {
 	if err != nil {
 		logg.Fatal("create metrics handler", zap.Error(err))
 	}
+	eventsHandler, err := api.NewEventsHandler(eventCollector, logg)
+	if err != nil {
+		logg.Fatal("create events handler", zap.Error(err))
+	}
 	dashboardRepository, err := storage.NewPostgreSQLDashboardRepository(db.Pool)
 	if err != nil {
 		logg.Fatal("create PostgreSQL dashboard repository", zap.Error(err))
@@ -123,11 +136,15 @@ func main() {
 	if err != nil {
 		logg.Fatal("create AI handler", zap.Error(err))
 	}
+	healthHandler, err := api.NewHealthHandler(cache, logg)
+	if err != nil {
+		logg.Fatal("create health handler", zap.Error(err))
+	}
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           api.NewRouter(metricsHandler, dashboardHandler, replayHandler, timeMachineHandler, aiHandler),
+			Handler:           api.NewRouter(metricsHandler, eventsHandler, dashboardHandler, replayHandler, timeMachineHandler, aiHandler, healthHandler),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

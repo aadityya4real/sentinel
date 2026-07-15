@@ -42,6 +42,10 @@ func (c *memoryCache) Store(context.Context, agent.Metrics) error {
 	return c.err
 }
 
+func (c *memoryCache) Get(_ context.Context, _ string) (agent.Metrics, error) {
+	return agent.Metrics{}, ErrCacheMiss
+}
+
 func TestServiceRecordStoresValidatedMetrics(t *testing.T) {
 	repository := &memoryRepository{}
 	events := &memoryEventAppender{}
