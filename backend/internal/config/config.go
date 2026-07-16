@@ -2,9 +2,11 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -74,7 +76,7 @@ func Load() (*Config, error) {
 		}).String()
 	}
 
-	return &Config{
+	cfg := &Config{
 		Port:          v.GetString("port"),
 		DatabaseURL:   databaseURL,
 		RedisAddress:  net.JoinHostPort(v.GetString("redis_host"), v.GetString("redis_port")),
@@ -83,5 +85,34 @@ func Load() (*Config, error) {
 		AIBaseURL:     v.GetString("ai_base_url"),
 		AIAPIKey:      v.GetString("ai_api_key"),
 		AIModel:       v.GetString("ai_model"),
-	}, nil
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+	return cfg, nil
+}
+
+// Validate ensures the configuration contains all values required to start the server.
+func (c *Config) Validate() error {
+	if strings.TrimSpace(c.Port) == "" {
+		return errors.New("server port is required")
+	}
+	if strings.TrimSpace(c.DatabaseURL) == "" {
+		return errors.New("database URL is required")
+	}
+	if strings.TrimSpace(c.RedisAddress) == "" {
+		return errors.New("Redis address is required")
+	}
+	if c.AIEnabled {
+		if strings.TrimSpace(c.AIAPIKey) == "" {
+			return errors.New("AI API key is required when AI is enabled")
+		}
+		if strings.TrimSpace(c.AIBaseURL) == "" {
+			return errors.New("AI base URL is required when AI is enabled")
+		}
+		if strings.TrimSpace(c.AIModel) == "" {
+			return errors.New("AI model is required when AI is enabled")
+		}
+	}
+	return nil
 }

@@ -40,7 +40,7 @@ func TestDashboardOverviewReturnsData(t *testing.T) {
 		t.Fatalf("NewDashboardHandler() error = %v", err)
 	}
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/dashboard/overview", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/dashboard/overview", nil)
 	response := httptest.NewRecorder()
 	handler.Overview(response, request)
 	if response.Code != http.StatusOK {
@@ -54,7 +54,7 @@ func TestDashboardHostsRejectsInvalidLimit(t *testing.T) {
 		t.Fatalf("NewDashboardHandler() error = %v", err)
 	}
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/dashboard/hosts?limit=251", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/dashboard/hosts?limit=251", nil)
 	response := httptest.NewRecorder()
 	handler.Hosts(response, request)
 	if response.Code != http.StatusBadRequest {
@@ -68,9 +68,9 @@ func TestDashboardHistoryReturnsBadRequestForInvalidRange(t *testing.T) {
 		t.Fatalf("NewDashboardHandler() error = %v", err)
 	}
 	router := chi.NewRouter()
-	router.Get("/v1/dashboard/hosts/{hostname}/metrics", handler.History)
+	router.Get("/api/v1/dashboard/hosts/{hostname}/metrics", handler.History)
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/dashboard/hosts/node-01/metrics?from=invalid", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/dashboard/hosts/node-01/metrics?from=invalid", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
@@ -84,7 +84,7 @@ func TestDashboardReturnsServiceUnavailable(t *testing.T) {
 		t.Fatalf("NewDashboardHandler() error = %v", err)
 	}
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/dashboard/overview", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/dashboard/overview", nil)
 	response := httptest.NewRecorder()
 	handler.Overview(response, request)
 	if response.Code != http.StatusServiceUnavailable {

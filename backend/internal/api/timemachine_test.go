@@ -28,7 +28,7 @@ func TestTimeMachineHandlerReturnsSnapshot(t *testing.T) {
 	}
 	router := timeMachineRouter(handler)
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/time-machine/hosts/node-01?at=2026-07-15T12:00:00Z", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/time-machine/hosts/node-01?at=2026-07-15T12:00:00Z", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
@@ -43,7 +43,7 @@ func TestTimeMachineHandlerReturnsNotFound(t *testing.T) {
 	}
 	router := timeMachineRouter(handler)
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/time-machine/hosts/node-01?at=2026-07-15T12:00:00Z", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/time-machine/hosts/node-01?at=2026-07-15T12:00:00Z", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {
@@ -58,7 +58,7 @@ func TestTimeMachineHandlerRejectsMissingTime(t *testing.T) {
 	}
 	router := timeMachineRouter(handler)
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/time-machine/hosts/node-01", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/time-machine/hosts/node-01", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
@@ -73,7 +73,7 @@ func TestTimeMachineHandlerReturnsServiceUnavailable(t *testing.T) {
 	}
 	router := timeMachineRouter(handler)
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/time-machine/hosts/node-01?at=2026-07-15T12:00:00Z", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/time-machine/hosts/node-01?at=2026-07-15T12:00:00Z", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusServiceUnavailable {
@@ -83,6 +83,6 @@ func TestTimeMachineHandlerReturnsServiceUnavailable(t *testing.T) {
 
 func timeMachineRouter(handler *TimeMachineHandler) http.Handler {
 	router := chi.NewRouter()
-	router.Get("/v1/time-machine/hosts/{hostname}", handler.Snapshot)
+	router.Get("/api/v1/time-machine/hosts/{hostname}", handler.Snapshot)
 	return router
 }

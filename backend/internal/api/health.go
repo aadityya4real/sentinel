@@ -3,123 +3,88 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
-	"github.com/aadityya4real/sentinel/backend/internal/agent"
 	"go.uber.org/zap"
 )
 
-const healthyWindow = 5 * time.Minute
+const apiVersion = "0.1.0"
 
-// HealthReader reads cached infrastructure metrics for health checks.
-type HealthReader interface {
-	ScanKeys(ctx context.Context) ([]string, error)
-	Get(ctx context.Context, hostname string) (agent.Metrics, error)
+// Pinger verifies that an infrastructure dependency is reachable.
+type Pinger interface {
+	Ping(ctx context.Context) error
 }
 
-// HostHealth describes the health status of a single monitored host.
-type HostHealth struct {
-	Hostname string `json:"hostname"`
-	Status   string `json:"status"`
-	CPU      string `json:"cpu"`
-	Memory   string `json:"memory"`
-	OS       string `json:"os"`
-}
-
-// HealthResponse contains the aggregate health status of the fleet.
+// HealthResponse reports the live status of Sentinel's infrastructure dependencies.
 type HealthResponse struct {
-	Status  string       `json:"status"`
-	Hosts   []HostHealth `json:"hosts"`
-	Version string       `json:"version"`
+	Status   string `json:"status"`
+	Database string `json:"database"`
+	Redis    string `json:"redis"`
+	Uptime   string `json:"uptime"`
+	Version  string `json:"version"`
 }
 
-// HealthHandler reports fleet health from the metrics cache.
+// HealthHandler reports infrastructure health by pinging PostgreSQL and Redis.
 type HealthHandler struct {
-	cache  HealthReader
-	logger *zap.Logger
-	now    func() time.Time
+	database  Pinger
+	redis     Pinger
+	logger    *zap.Logger
+	startedAt time.Time
 }
 
-// NewHealthHandler creates a handler that serves infrastructure health from the metrics cache.
-func NewHealthHandler(cache HealthReader, logger *zap.Logger) (*HealthHandler, error) {
-	if cache == nil {
-		return nil, errors.New("health reader is required")
+// NewHealthHandler creates a handler that pings infrastructure dependencies.
+func NewHealthHandler(database, redis Pinger, logger *zap.Logger) (*HealthHandler, error) {
+	if database == nil {
+		return nil, errors.New("database pinger is required")
+	}
+	if redis == nil {
+		return nil, errors.New("redis pinger is required")
 	}
 	if logger == nil {
 		return nil, errors.New("logger is required")
 	}
-	return &HealthHandler{cache: cache, logger: logger, now: time.Now}, nil
+	return &HealthHandler{
+		database:  database,
+		redis:     redis,
+		logger:    logger,
+		startedAt: time.Now(),
+	}, nil
 }
 
-// ServeHTTP handles GET /health by reading cached metrics and classifying host health.
+// ServeHTTP handles GET /api/v1/health by pinging PostgreSQL and Redis.
 func (h *HealthHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	ctx := request.Context()
-	response, err := h.buildResponse(ctx)
-	if err != nil {
-		h.logger.Error("build health response", zap.Error(err))
-		writeError(writer, http.StatusServiceUnavailable, "health_unavailable", "health check failed")
-		return
+
+	dbStatus := pingDependency(ctx, h.database, h.logger, "database")
+	redisStatus := pingDependency(ctx, h.redis, h.logger, "redis")
+
+	status := "healthy"
+	if dbStatus == "disconnected" || redisStatus == "disconnected" {
+		status = "unhealthy"
 	}
-	writeJSON(writer, http.StatusOK, response)
+
+	response := HealthResponse{
+		Status:   status,
+		Database: dbStatus,
+		Redis:    redisStatus,
+		Uptime:   time.Since(h.startedAt).Round(time.Second).String(),
+		Version:  apiVersion,
+	}
+
+	code := http.StatusOK
+	if status == "unhealthy" {
+		code = http.StatusServiceUnavailable
+	}
+	writeJSON(writer, code, response)
 }
 
-func (h *HealthHandler) buildResponse(ctx context.Context) (HealthResponse, error) {
-	keys, err := h.cache.ScanKeys(ctx)
-	if err != nil {
-		return HealthResponse{}, err
+func pingDependency(ctx context.Context, pinger Pinger, logger *zap.Logger, name string) string {
+	pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err := pinger.Ping(pingCtx); err != nil {
+		logger.Warn("health check failed", zap.String("dependency", name), zap.Error(err))
+		return "disconnected"
 	}
-
-	now := h.now().UTC()
-	cutoff := now.Add(-healthyWindow)
-
-	hosts := make([]HostHealth, 0, len(keys))
-	allHealthy := true
-
-	for _, key := range keys {
-		hostname := hostnameFromKey(key)
-		metrics, err := h.cache.Get(ctx, hostname)
-		if err != nil {
-			h.logger.Warn("skip host in health check", zap.String("key", key), zap.Error(err))
-			continue
-		}
-		status := "healthy"
-		if metrics.Timestamp.Before(cutoff) {
-			status = "degraded"
-			allHealthy = false
-		}
-		hosts = append(hosts, HostHealth{
-			Hostname: hostname,
-			Status:   status,
-			CPU:      fmt.Sprintf("%.1f%%", metrics.CPUUsagePercent),
-			Memory:   fmt.Sprintf("%.1f%%", metrics.Memory.UsedPercent),
-			OS:       metrics.OS,
-		})
-	}
-
-	fleetStatus := "unhealthy"
-	if len(hosts) > 0 {
-		fleetStatus = "degraded"
-	}
-	if allHealthy && len(hosts) > 0 {
-		fleetStatus = "healthy"
-	}
-
-	return HealthResponse{Status: fleetStatus, Hosts: hosts, Version: "0.1.0"}, nil
-}
-
-func hostnameFromKey(key string) string {
-	const prefix = "sentinel:metrics:latest:"
-	if !strings.HasPrefix(key, prefix) {
-		return key
-	}
-	encoded := strings.TrimPrefix(key, prefix)
-	decoded, err := url.PathUnescape(encoded)
-	if err != nil {
-		return encoded
-	}
-	return decoded
+	return "connected"
 }

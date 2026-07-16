@@ -91,7 +91,7 @@ func TestMetricsHandlerRejectsOversizedPayload(t *testing.T) {
 
 func executeRequest(t *testing.T, handler http.Handler, method string, body []byte, contentType string) *httptest.ResponseRecorder {
 	t.Helper()
-	request := httptest.NewRequest(method, "/v1/metrics", bytes.NewReader(body))
+	request := httptest.NewRequest(method, "/api/v1/metrics", bytes.NewReader(body))
 	request.Header.Set("Content-Type", contentType)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)

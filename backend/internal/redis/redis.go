@@ -30,3 +30,8 @@ func New(ctx context.Context, address, password string) (*Redis, error) {
 func (r *Redis) Close() error {
 	return r.Client.Close()
 }
+
+// Ping verifies that the Redis connection is alive.
+func (r *Redis) Ping(ctx context.Context) error {
+	return r.Client.Ping(ctx).Err()
+}

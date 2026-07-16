@@ -27,9 +27,9 @@ func TestReplayHandlerReturnsTimeline(t *testing.T) {
 		t.Fatalf("NewReplayHandler() error = %v", err)
 	}
 	router := chi.NewRouter()
-	router.Get("/v1/replay/hosts/{hostname}", handler.Replay)
+	router.Get("/api/v1/replay/hosts/{hostname}", handler.Replay)
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/replay/hosts/node-01", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/replay/hosts/node-01", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
@@ -43,9 +43,9 @@ func TestReplayHandlerReturnsBadRequestForInvalidLimit(t *testing.T) {
 		t.Fatalf("NewReplayHandler() error = %v", err)
 	}
 	router := chi.NewRouter()
-	router.Get("/v1/replay/hosts/{hostname}", handler.Replay)
+	router.Get("/api/v1/replay/hosts/{hostname}", handler.Replay)
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/replay/hosts/node-01?limit=1000", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/replay/hosts/node-01?limit=1000", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
@@ -59,9 +59,9 @@ func TestReplayHandlerReturnsServiceUnavailable(t *testing.T) {
 		t.Fatalf("NewReplayHandler() error = %v", err)
 	}
 	router := chi.NewRouter()
-	router.Get("/v1/replay/hosts/{hostname}", handler.Replay)
+	router.Get("/api/v1/replay/hosts/{hostname}", handler.Replay)
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/replay/hosts/node-01", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/replay/hosts/node-01", nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusServiceUnavailable {

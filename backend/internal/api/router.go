@@ -3,29 +3,55 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
+	"github.com/aadityya4real/sentinel/backend/internal/middleware"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"go.uber.org/zap"
 )
 
-// NewRouter creates the Sentinel HTTP router and registers its API endpoints.
-func NewRouter(metricsHandler *MetricsHandler, eventsHandler *EventsHandler, dashboardHandler *DashboardHandler, replayHandler *ReplayHandler, timeMachineHandler *TimeMachineHandler, aiHandler *AIHandler, healthHandler *HealthHandler) http.Handler {
-	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(15 * time.Second))
+// Handlers bundles all HTTP handlers required by the Sentinel API router.
+type Handlers struct {
+	Health       *HealthHandler
+	Metrics      *MetricsHandler
+	Events       *EventsHandler
+	Dashboard    *DashboardHandler
+	Replay       *ReplayHandler
+	TimeMachine  *TimeMachineHandler
+	AI           *AIHandler
+}
 
-	r.Get("/health", healthHandler.ServeHTTP)
-	r.Post("/v1/metrics", metricsHandler.ServeHTTP)
-	r.Post("/api/v1/events", eventsHandler.ServeHTTP)
-	r.Get("/v1/dashboard/overview", dashboardHandler.Overview)
-	r.Get("/v1/dashboard/hosts", dashboardHandler.Hosts)
-	r.Get("/v1/dashboard/hosts/{hostname}/metrics", dashboardHandler.History)
-	r.Get("/v1/replay/hosts/{hostname}", replayHandler.Replay)
-	r.Get("/v1/time-machine/hosts/{hostname}", timeMachineHandler.Snapshot)
-	r.Post("/v1/ai/incidents/analyze", aiHandler.AnalyzeIncident)
+// NewRouter creates the Sentinel HTTP router with standardized /api/v1 routes.
+func NewRouter(handlers Handlers, logger *zap.Logger) http.Handler {
+	r := chi.NewRouter()
+	for _, mw := range middleware.Chain(logger) {
+		r.Use(mw)
+	}
+
+	r.Get("/", landingHandler(apiVersion))
+
+	r.Route("/api/v1", func(r chi.Router) {
+		r.Get("/health", handlers.Health.ServeHTTP)
+		r.Post("/metrics", handlers.Metrics.ServeHTTP)
+		r.Post("/events", handlers.Events.ServeHTTP)
+
+		r.Route("/dashboard", func(r chi.Router) {
+			r.Get("/overview", handlers.Dashboard.Overview)
+			r.Get("/hosts", handlers.Dashboard.Hosts)
+			r.Get("/hosts/{hostname}/metrics", handlers.Dashboard.History)
+		})
+
+		r.Route("/replay", func(r chi.Router) {
+			r.Get("/hosts/{hostname}", handlers.Replay.Replay)
+		})
+
+		r.Route("/time-machine", func(r chi.Router) {
+			r.Get("/hosts/{hostname}", handlers.TimeMachine.Snapshot)
+		})
+
+		r.Route("/ai", func(r chi.Router) {
+			r.Post("/incidents/analyze", handlers.AI.AnalyzeIncident)
+		})
+	})
 
 	return r
 }

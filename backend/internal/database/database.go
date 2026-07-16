@@ -45,3 +45,8 @@ func New(ctx context.Context, connectionString string) (*Database, error) {
 func (d *Database) Close() {
 	d.Pool.Close()
 }
+
+// Ping verifies that the PostgreSQL connection is alive.
+func (d *Database) Ping(ctx context.Context) error {
+	return d.Pool.Ping(ctx)
+}

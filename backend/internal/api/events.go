@@ -1,22 +1,29 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
+	"github.com/aadityya4real/sentinel/backend/internal/eventstore"
 	"github.com/aadityya4real/sentinel/backend/internal/events"
 	"github.com/aadityya4real/sentinel/backend/internal/models"
 	"go.uber.org/zap"
 )
 
+// EventCollector receives and persists infrastructure events from Sentinel Agents.
+type EventCollector interface {
+	Collect(ctx context.Context, event models.Event) (eventstore.Event, error)
+}
+
 // EventsHandler receives infrastructure events from Sentinel Agents.
 type EventsHandler struct {
-	collector *events.Collector
+	collector EventCollector
 	logger    *zap.Logger
 }
 
 // NewEventsHandler creates an HTTP handler for Agent event ingestion.
-func NewEventsHandler(collector *events.Collector, logger *zap.Logger) (*EventsHandler, error) {
+func NewEventsHandler(collector EventCollector, logger *zap.Logger) (*EventsHandler, error) {
 	if collector == nil {
 		return nil, errors.New("event collector is required")
 	}

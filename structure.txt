@@ -1,0 +1,127 @@
+Folder PATH listing for volume Data
+Volume serial number is 0000000E 5917:D020
+W:.
+¦   .env.example
+¦   .gitignore
+¦   docker-compose.yml
+¦   Makefile
+¦   project_context.md
+¦   README.md
+¦   structure.txt
+¦   
++---.github
++---.zcode
+¦   +---plans
+¦           plan-sess_1d8b1d2a-eecb-448e-b80d-cec8e747081f.md
+¦           
++---backend
+¦   ¦   go.mod
+¦   ¦   go.sum
+¦   ¦   
+¦   +---cmd
+¦   ¦   +---agent
+¦   ¦   ¦       main.go
+¦   ¦   ¦       
+¦   ¦   +---server
+¦   ¦   ¦       main.go
+¦   ¦   ¦       
+¦   ¦   +---worker
+¦   +---config
+¦   ¦       config.go
+¦   ¦       
+¦   +---internal
+¦       +---agent
+¦       ¦       collector.go
+¦       ¦       metrics.go
+¦       ¦       system_collector.go
+¦       ¦       
+¦       +---ai
+¦       ¦       analyzer.go
+¦       ¦       disabled.go
+¦       ¦       openai_client.go
+¦       ¦       
+¦       +---alert
+¦       +---api
+¦       ¦       ai.go
+¦       ¦       dashboard.go
+¦       ¦       dashboard_test.go
+¦       ¦       events.go
+¦       ¦       events_test.go
+¦       ¦       health.go
+¦       ¦       health_test.go
+¦       ¦       metrics.go
+¦       ¦       metrics_test.go
+¦       ¦       replay.go
+¦       ¦       replay_test.go
+¦       ¦       router.go
+¦       ¦       timemachine.go
+¦       ¦       timemachine_test.go
+¦       ¦       
+¦       +---auth
+¦       +---collector
+¦       ¦       service.go
+¦       ¦       service_test.go
+¦       ¦       
+¦       +---config
+¦       ¦       config.go
+¦       ¦       
+¦       +---dashboard
+¦       ¦       service.go
+¦       ¦       service_test.go
+¦       ¦       
+¦       +---database
+¦       ¦   ¦   database.go
+¦       ¦   ¦   migrations.go
+¦       ¦   ¦   project_context.md
+¦       ¦   ¦   
+¦       ¦   +---migrations
+¦       ¦           001_create_infrastructure_metrics.sql
+¦       ¦           002_create_infrastructure_events.sql
+¦       ¦           003_create_servers_and_events.sql
+¦       ¦           
+¦       +---events
+¦       ¦       repository.go
+¦       ¦       service.go
+¦       ¦       service_test.go
+¦       ¦       
+¦       +---eventstore
+¦       ¦       event.go
+¦       ¦       event_test.go
+¦       ¦       
+¦       +---logger
+¦       ¦       logger.go
+¦       ¦       
+¦       +---metrics
+¦       +---middleware
+¦       +---models
+¦       ¦       event.go
+¦       ¦       server_event.go
+¦       ¦       server_event_test.go
+¦       ¦       
+¦       +---redis
+¦       ¦       redis.go
+¦       ¦       
+¦       +---replay
+¦       ¦       engine.go
+¦       ¦       engine_test.go
+¦       ¦       
+¦       +---storage
+¦       ¦       postgres_dashboard.go
+¦       ¦       postgres_event_store.go
+¦       ¦       postgres_metrics.go
+¦       ¦       redis_latest_events.go
+¦       ¦       redis_metrics.go
+¦       ¦       
+¦       +---timemachine
+¦       ¦       engine.go
+¦       ¦       engine_test.go
+¦       ¦       
+¦       +---websocket
++---deployments
++---docs
+¦   +---adr
+¦   +---api
+¦   +---architecture
+¦   +---design
++---frontend
++---scripts
