@@ -1,189 +1,182 @@
-## Sentinel Refactor Plan — Comprehensive
+## Sentinel Frontend — Complete Architecture Plan
 
-All 11 goals addressed. 8 new files, 13 modified files, 1 new test file. Zero architecture changes — same packages, same patterns, same DI style.
+**Stack:** React 19 + TypeScript + Vite + Tailwind v4 + React Router + TanStack Query + Recharts + Framer Motion + Lucide
+**Accent:** Indigo/Violet dark theme
+**Data:** Real backend via React Query; dev-only mock fallback isolated in `services/mock/` behind `VITE_USE_MOCK_DATA`
 
 ---
 
-### GOAL 1 + 7: Refactor `main.go` → `internal/server/` with dependency builder
+### Project Structure (feature-based, ≤250 lines/file)
 
-**NEW `internal/server/dependencies.go`** (~120 lines)
-- `Dependencies` struct bundling all 7 handlers
-- `buildDependencies(ctx, cfg, db, redis, logger) (*Dependencies, error)` — factory function that wires all repositories → services → handlers in order. Replaces the constructor noise in main.go. Each error is wrapped with context (`fmt.Errorf("create X: %w", err)`). Handles AI-enabled/disabled branching.
-
-**NEW `internal/server/http.go`** (~30 lines)
-- `buildHTTPServer()` method on `*App` — constructs `api.NewRouter(api.Handlers{...}, logger)` and wraps it in an `*http.Server` with the same timeouts (ReadHeader 5s, Read 15s, Write 15s, Idle 60s, MaxHeaderBytes 1MiB).
-
-**NEW `internal/server/app.go`** (~100 lines)
-- `App` struct holding `cfg`, `logger`, `db`, `redis`, `deps`
-- `New(cfg *config.Config) (*App, error)` — validates config, creates logger, connects PostgreSQL + applies migrations, connects Redis, builds dependencies. Cleans up on partial failure (closes Redis/DB if a later step fails).
-- `Run() error` — builds HTTP server, starts listening in goroutine, signal handling (`SIGINT`/`SIGTERM`), graceful shutdown (20s budget), closes Redis + DB. Returns error instead of `log.Fatal`.
-
-**MODIFY `cmd/server/main.go`** (~20 lines, down from 174)
-```go
-func main() {
-    cfg, err := config.Load()
-    if err != nil { log.Fatal(err) }
-    app, err := server.New(cfg)
-    if err != nil { log.Fatal(err) }
-    if err := app.Run(); err != nil { log.Fatal(err) }
-}
+```
+frontend/
+├── index.html
+├── package.json
+├── tsconfig.json
+├── tsconfig.node.json
+├── vite.config.ts
+├── .env.example
+├── src/
+│   ├── main.tsx                    # React root + providers
+│   ├── App.tsx                     # Router + route definitions
+│   ├── index.css                   # Tailwind directives + design tokens
+│   ├── types/
+│   │   ├── api.ts                  # HealthResponse, Overview, HostsPage, History, Timeline, Snapshot, Analysis
+│   │   └── domain.ts               # UI-only types: NavItem, Severity, HostStatus
+│   ├── config/
+│   │   └── env.ts                  # Centralized env reading (VITE_API_URL, VITE_USE_MOCK_DATA, refresh interval)
+│   ├── lib/
+│   │   ├── queryClient.ts          # TanStack Query client factory
+│   │   ├── cn.ts                   # classname merge util (clsx + tailwind-merge)
+│   │   └── format.ts               # bytes, percent, duration, relative-time formatters
+│   ├── services/
+│   │   ├── http.ts                 # fetch wrapper: base URL, JSON, typed errors, query-string builder
+│   │   ├── api/
+│   │   │   ├── health.ts           # useHealth() query
+│   │   │   ├── dashboard.ts        # useOverview(), useHosts(), useHistory()
+│   │   │   ├── replay.ts           # useReplay()
+│   │   │   ├── timemachine.ts      # useSnapshot()
+│   │   │   └── ai.ts               # useAnalyzeIncident() mutation
+│   │   └── mock/
+│   │       ├── index.ts            # shouldUseMock(queryKey) — dev mode + backend down/empty check
+│   │       ├── dashboard.ts        # mock Overview + Hosts + History
+│   │       ├── hosts.ts            # mock host fleet data
+│   │       ├── events.ts           # mock event timeline
+│   │       ├── replay.ts           # mock replay timeline
+│   │       └── ai.ts               # mock AI analysis response
+│   ├── hooks/
+│   │   ├── useClock.ts             # live ticking clock for top bar
+│   │   ├── useTheme.ts             # dark/light toggle (dark default)
+│   │   └── useDebounce.ts          # search input debouncer
+│   ├── layouts/
+│   │   ├── AppLayout.tsx           # sidebar + topbar + <Outlet/>
+│   │   ├── Sidebar.tsx             # logo, nav menu, collapse
+│   │   └── TopBar.tsx              # search, clock, backend status badge, theme toggle, avatar
+│   ├── components/
+│   │   ├── ui/                     # primitives (reusable, no domain logic)
+│   │   │   ├── Card.tsx
+│   │   │   ├── Button.tsx
+│   │   │   ├── Badge.tsx           # status pills (active/stale/healthy/critical)
+│   │   │   ├── Skeleton.tsx
+│   │   │   ├── Spinner.tsx
+│   │   │   ├── EmptyState.tsx
+│   │   │   └── ErrorState.tsx
+│   │   ├── charts/
+│   │   │   ├── AreaChartCard.tsx   # CPU/Memory time series
+│   │   │   ├── GaugeCard.tsx       # single-percent radial gauge
+│   │   │   └── Sparkline.tsx       # mini inline trend
+│   │   ├── dashboard/
+│   │   │   ├── FleetOverviewCards.tsx
+│   │   │   ├── LiveInfrastructureCharts.tsx
+│   │   │   ├── HostTable.tsx
+│   │   │   ├── RecentEventsTimeline.tsx
+│   │   │   └── AIInsightsCard.tsx
+│   │   └── timemachine/
+│   │       ├── TimelineSlider.tsx  # the scrubber
+│   │       ├── ReplayControls.tsx  # prev/play/pause/next
+│   │       └── SnapshotComparison.tsx
+│   └── pages/
+│       ├── DashboardPage.tsx
+│       ├── HostsPage.tsx
+│       ├── HostDetailPage.tsx
+│       ├── EventsPage.tsx
+│       ├── ReplayPage.tsx
+│       ├── TimeMachinePage.tsx
+│       ├── AIPage.tsx
+│       └── SettingsPage.tsx
 ```
 
 ---
 
-### GOAL 2: Standardize ALL routes to `/api/v1/`
+### Design System (index.css tokens)
 
-**MODIFY `internal/api/router.go`**
+Dark-first palette, violet accent:
+- `--bg-base: #0a0a0f` (near-black canvas)
+- `--bg-surface: #13131a` (card surface)
+- `--bg-elevated: #1c1c26` (hover/elevated)
+- `--border: #27272f`
+- `--accent: #7c3aed` (violet-600), `--accent-bright: #8b5cf6`
+- `--text-primary: #f1f5f9`, `--text-secondary: #94a3b8`, `--text-muted: #64748b`
+- Status: emerald (healthy), amber (degraded), rose (critical), slate (stale)
 
-Old → New route mapping:
-| Old | New |
-|---|---|
-| `GET /health` | `GET /api/v1/health` |
-| `POST /v1/metrics` | `POST /api/v1/metrics` |
-| `POST /api/v1/events` | `POST /api/v1/events` *(unchanged)* |
-| `GET /v1/dashboard/overview` | `GET /api/v1/dashboard/overview` |
-| `GET /v1/dashboard/hosts` | `GET /api/v1/dashboard/hosts` |
-| `GET /v1/dashboard/hosts/{hostname}/metrics` | `GET /api/v1/dashboard/hosts/{hostname}/metrics` |
-| `GET /v1/replay/hosts/{hostname}` | `GET /api/v1/replay/hosts/{hostname}` |
-| `GET /v1/time-machine/hosts/{hostname}` | `GET /api/v1/time-machine/hosts/{hostname}` |
-| `POST /v1/ai/incidents/analyze` | `POST /api/v1/ai/incidents/analyze` |
-
-Also introduces `api.Handlers` struct (bundles 7 handlers) replacing the 7-param `NewRouter` signature → `NewRouter(handlers Handlers, logger *zap.Logger)`. Adds `apiVersion = "0.1.0"` constant.
-
-**Test path updates** (route strings in local chi routers):
-- `dashboard_test.go`: `/v1/dashboard/...` → `/api/v1/dashboard/...`
-- `replay_test.go`: `/v1/replay/...` → `/api/v1/replay/...`
-- `timemachine_test.go`: `/v1/time-machine/...` → `/api/v1/time-machine/...`
-- `metrics_test.go`: `/v1/metrics` → `/api/v1/metrics` (cosmetic in request URL)
+Cards: `rounded-2xl`, `border border-[--border]`, `bg-[--bg-surface]`, `shadow-lg shadow-black/20`, hover lift via Framer Motion.
 
 ---
 
-### GOAL 3: Fix Health Endpoint (infrastructure connectivity)
+### Data Layer Strategy (the key decision)
 
-**MODIFY `internal/database/database.go`** — add `Ping(ctx) error` method:
-```go
-func (d *Database) Ping(ctx context.Context) error { return d.Pool.Ping(ctx) }
+**`services/mock/index.ts`** exports `withMockFallback<T>(queryKey, realFetcher, mockGenerator)`:
+1. Always tries `realFetcher()` first.
+2. In **dev** (`VITE_USE_MOCK_DATA=true`): if fetch throws (backend down) OR response is empty (`hosts.length === 0`, etc.), return `mockGenerator()` instead.
+3. In **prod**: never intercepts — errors and empty states propagate normally.
+4. UI hooks (`useHosts`, etc.) call `withMockFallback` — the pages never know.
+
+Each query hook uses a **consistent refresh interval** (default 15s, configurable in Settings + `VITE_REFRESH_INTERVAL_MS`).
+
+---
+
+### Routing (React Router)
+
+```
+/                    → redirect to /dashboard
+/dashboard           → DashboardPage
+/hosts               → HostsPage
+/hosts/:hostname     → HostDetailPage
+/events              → EventsPage
+/replay              → ReplayPage  (host selector + timeline)
+/replay/:hostname    → ReplayPage  (preselected host)
+/time-machine        → TimeMachinePage
+/ai                  → AIPage
+/settings            → SettingsPage
 ```
 
-**MODIFY `internal/redis/redis.go`** — add `Ping(ctx) error` method:
-```go
-func (r *Redis) Ping(ctx context.Context) error { return r.Client.Ping(ctx).Err() }
-```
-
-**REWRITE `internal/api/health.go`** (~90 lines) — new `Pinger` interface:
-```go
-type Pinger interface { Ping(ctx context.Context) error }
-```
-Handler takes `database Pinger, redis Pinger, logger`. Pings both on every request, returns:
-```json
-{"status":"healthy","database":"connected","redis":"connected","uptime":"15m0s","version":"0.1.0"}
-```
-Returns HTTP 503 when any dependency is disconnected. Tracks `startedAt` for uptime. The old `HealthReader` interface and host-metrics logic are removed (host metrics already live at `/api/v1/dashboard/hosts`). Per your decision, the cache `Get`/`ScanKeys` methods on `RedisLatestMetricsCache` remain for future use.
-
-**REWRITE `internal/api/health_test.go`** — tests using `stubPinger`:
-1. Both connected → 200 + `"healthy"`
-2. DB down → 503 + `"unhealthy"` + `"database":"disconnected"`
-3. Redis down → 503 + `"unhealthy"` + `"redis":"disconnected"`
-4. Nil deps rejected
+Lazy-loaded page chunks via `React.lazy` + `Suspense` skeleton fallback.
 
 ---
 
-### GOAL 4: Fix root route (HTML landing page)
+### Key Pages
 
-**NEW `internal/api/landing.go`** (~50 lines)
-- `landingHandler(version string) http.HandlerFunc` serving a self-contained HTML page:
-  - Title: "Sentinel Infrastructure Event Intelligence Platform"
-  - Version
-  - Available API endpoints list
-  - Health endpoint link
-- Registered as `GET /` in the router. No more 404.
+1. **Dashboard** — 6 fleet cards, 2 area charts (CPU/Memory fleet averages), host table, events timeline, AI insights placeholder card. All wired to `useOverview()` + `useHosts()`.
 
----
+2. **Hosts** — filterable host grid/table, click → `/hosts/:hostname`.
 
-### GOAL 5: Introduce Middleware
+3. **Host Detail** — `useHistory(hostname)` → CPU/Memory/Disk charts, status badge, event history list, "Open in Time Machine" button.
 
-**NEW `internal/middleware/` package** (4 files):
+4. **Events** — chronological event list with type filter chips, severity coloring.
 
-| File | Content | Lines |
-|---|---|---|
-| `recovery.go` | `Recovery(logger)` — panic recovery with zap logging + `runtime/debug` stack trace | ~25 |
-| `logging.go` | `Logging(logger)` — request logging (method, path, status, duration) via zap + `statusRecorder` writer | ~35 |
-| `cors.go` | `CORS(allowedOrigins []string)` — sets CORS headers, handles OPTIONS preflight | ~30 |
-| `chain.go` | `Chain(logger) []func(http.Handler) http.Handler` — assembles full stack: RequestID → RealIP → Recovery → Logging → CORS → Timeout(15s) | ~20 |
+5. **Replay** — host selector, `useReplay(hostname)` → scrollable event timeline. Cursor pagination when `next_cursor` present.
 
-Recovery/Logging/CORS are custom (zap-integrated). RequestID/RealIP/Timeout use chi's battle-tested built-ins (no point reinventing). Applied in router via `r.Use(mw.Chain(logger)...)`.
+6. **Time Machine (flagship)** — host selector + `at` datetime picker → `useSnapshot()`. Timeline slider scrubs through snapshots. Prev/Play/Pause/Next controls. Snapshot comparison (two side-by-side metric cards). Play auto-advances through time steps with Framer Motion transitions.
+
+7. **AI** — incident form (hostname, time range) → `useAnalyzeIncident()` mutation. Chat-style response panel showing summary, severity badge, probable causes, evidence, recommended actions, confidence bar. Analysis history (local state, persisted to localStorage).
+
+8. **Settings** — theme toggle, API URL display, refresh interval slider, version. Read from `config/env.ts`.
 
 ---
 
-### GOAL 6: Validate configuration on startup
+### State & Loading
 
-**MODIFY `internal/config/config.go`** — add `Validate() error` method:
-- Port must be non-empty
-- DatabaseURL must be non-empty
-- RedisAddress must be non-empty
-- If `AIEnabled`: AIAPIKey, AIBaseURL, AIModel must all be non-empty
-
-Called at the end of `Load()` (fail-fast) and again in `server.New()` (defense-in-depth).
-
-**NEW `internal/config/config_test.go`** — tests for valid config, missing port, missing DB URL, AI enabled without API key.
+- **TanStack Query** for all server state. `staleTime: 10s`, `refetchInterval: 15s` on dashboard/health.
+- **Loading**: Skeleton loaders matching each card's shape.
+- **Empty**: `EmptyState` component with icon + message.
+- **Error**: `ErrorState` with retry button calling `refetch()`.
+- **Backend status**: top bar badge polls `/api/v1/health` every 15s — emerald "Operational" / rose "Disconnected".
 
 ---
 
-### GOAL 8: Package responsibilities (enforced, no violations)
-- `database/` — PostgreSQL only ✓ (Ping method is connection management)
-- `redis/` — Redis only ✓ (Ping method is connection management)
-- `collector/` — metric collection only ✓ (unchanged)
-- `api/` — HTTP handlers only ✓ (landing, health, routing)
-- `server/` — application bootstrap only ✓ (app, http, dependencies)
-- `middleware/` — HTTP middleware only ✓ (new)
+### Files to generate: ~55
 
----
+Tooling (7): package.json, vite.config.ts, tsconfig.json, tsconfig.node.json, index.html, .env.example, src/index.css
+Core (5): main.tsx, App.tsx, config/env.ts, lib/queryClient.ts, lib/cn.ts, lib/format.ts
+Types (2): types/api.ts, types/domain.ts
+Services (8): services/http.ts + 5 api/ files + services/mock/index.ts
+Mock (6): mock/{index,dashboard,hosts,events,replay,ai}.ts
+Hooks (3): useClock, useTheme, useDebounce
+Layouts (3): AppLayout, Sidebar, TopBar
+UI components (7): Card, Button, Badge, Skeleton, Spinner, EmptyState, ErrorState
+Charts (3): AreaChartCard, GaugeCard, Sparkline
+Dashboard components (5): FleetOverviewCards, LiveInfrastructureCharts, HostTable, RecentEventsTimeline, AIInsightsCard
+TimeMachine components (3): TimelineSlider, ReplayControls, SnapshotComparison
+Pages (8): Dashboard, Hosts, HostDetail, Events, Replay, TimeMachine, AI, Settings
 
-### GOAL 7 (DI): EventsHandler interface extraction
-
-**MODIFY `internal/api/events.go`** — extract `EventCollector` interface:
-```go
-type EventCollector interface {
-    Collect(ctx context.Context, event models.Event) (eventstore.Event, error)
-}
-```
-Handler now depends on the interface, not the concrete `*events.Collector`. `events_test.go` works unchanged (concrete struct satisfies the interface).
-
----
-
-### GOAL 9 + 10: Tests
-- All existing tests preserved or updated as required
-- `go test ./...` must pass 100%
-
----
-
-### GOAL 11: Deliverables
-After implementation: folder structure tree, per-file change explanation, commands to run, verification checklist.
-
----
-
-### File Summary
-
-| # | File | Action |
-|---|---|---|
-| 1 | `internal/server/app.go` | NEW |
-| 2 | `internal/server/http.go` | NEW |
-| 3 | `internal/server/dependencies.go` | NEW |
-| 4 | `internal/middleware/recovery.go` | NEW |
-| 5 | `internal/middleware/logging.go` | NEW |
-| 6 | `internal/middleware/cors.go` | NEW |
-| 7 | `internal/middleware/chain.go` | NEW |
-| 8 | `internal/api/landing.go` | NEW |
-| 9 | `cmd/server/main.go` | MODIFY (shrink) |
-| 10 | `internal/api/router.go` | MODIFY (routes + Handlers struct) |
-| 11 | `internal/api/health.go` | REWRITE (Pinger-based) |
-| 12 | `internal/api/health_test.go` | REWRITE |
-| 13 | `internal/api/events.go` | MODIFY (interface extraction) |
-| 14 | `internal/api/metrics_test.go` | MODIFY (path) |
-| 15 | `internal/api/dashboard_test.go` | MODIFY (paths) |
-| 16 | `internal/api/replay_test.go` | MODIFY (paths) |
-| 17 | `internal/api/timemachine_test.go` | MODIFY (paths) |
-| 18 | `internal/config/config.go` | MODIFY (Validate) |
-| 19 | `internal/config/config_test.go` | NEW |
-| 20 | `internal/database/database.go` | MODIFY (Ping) |
-| 21 | `internal/redis/redis.go` | MODIFY (Ping) |
+Everything compiles via `tsc && vite build`. No TODOs, no placeholders.
