@@ -1,49 +1,108 @@
+﻿import { motion } from 'framer-motion';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { mockEvents } from '@/services/mock/events';
-import { formatRelativeTime } from '@/lib/format';
 import type { Event } from '@/types/api';
 
-function eventTypeVariant(type: string): 'info' | 'active' | 'critical' {
-  if (type.includes('critical') || type.includes('warning')) return 'critical';
-  if (type.includes('started')) return 'active';
-  return 'info';
+/** Maps an event type string to a severity badge variant + dot color */
+function classifyEvent(type: string): { variant: 'info' | 'active' | 'critical'; color: string; label: string } {
+  if (type.includes('critical')) return { variant: 'critical', color: '#f43f5e', label: 'Critical' };
+  if (type.includes('warning') || type.includes('spike') || type.includes('error')) return { variant: 'active', color: '#f59e0b', label: 'Warning' };
+  if (type.includes('restarted') || type.includes('started') || type.includes('deployed')) return { variant: 'info', color: '#10b981', label: 'Info' };
+  if (type.includes('recovered') || type.includes('health')) return { variant: 'info', color: '#3b82f6', label: 'Recovered' };
+  return { variant: 'info', color: '#7c3aed', label: 'Info' };
 }
 
-interface EventRowProps {
+function formatEventType(type: string): string {
+  // infrastructure.cpu.spike -> CPU Spike
+  const parts = type.split('.').slice(-2);
+  return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+}
+
+interface TimelineEntryProps {
   event: Event;
+  index: number;
 }
 
-function EventRow({ event }: EventRowProps) {
+export function TimelineEntry({ event, index }: TimelineEntryProps) {
+  const { variant, color, label } = classifyEvent(event.type);
+  const description = formatEventType(event.type);
+
   return (
-    <div className="flex items-start gap-3 py-2">
-      <div className="mt-1.5 h-2 w-2 rounded-full bg-accent shrink-0" />
+    <motion.div
+      initial={{ opacity: 0, x: -4 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.03 }}
+      className="group flex items-start gap-3 py-2.5 last:pb-0"
+    >
+      {/* vertical timeline line */}
+      <div className="flex flex-col items-center">
+        <div className="mt-1.5 h-2.5 w-2.5 rounded-full shrink-0 ring-4 ring-base" style={{ backgroundColor: color }} />
+      </div>
+
+      {/* content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant={eventTypeVariant(event.type)}>{event.type.split('.').pop()}</Badge>
-          <span className="text-xs text-slate-400">{event.subject_id}</span>
+          <Badge variant={variant}>{label}</Badge>
+          <span className="text-xs font-mono text-slate-500">{event.subject_id}</span>
         </div>
-        <p className="mt-0.5 text-xs text-slate-500">{formatRelativeTime(event.occurred_at)}</p>
+        <p className="mt-0.5 text-sm text-slate-300">{description}</p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          {new Date(event.occurred_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+        </p>
       </div>
-    </div>
+
+      {/* right-side metadata (visible on hover) */}
+      <span className="hidden sm:block text-xs text-slate-600 tabular-nums group-hover:text-slate-400 transition-colors">
+        {event.key}
+      </span>
+    </motion.div>
   );
 }
 
-export function RecentEventsTimeline() {
-  const events = mockEvents(8);
+interface RecentEventsTimelineProps {
+  events: Event[];
+  isLoading: boolean;
+}
 
-  if (events.length === 0) {
-    return <EmptyState title="No events yet" description="Infrastructure events will appear here as agents report." />;
+export function RecentEventsTimeline({ events, isLoading }: RecentEventsTimelineProps) {
+  if (isLoading) {
+    return <RecentEventsSkeleton />;
+  }
+
+  if (!events.length) {
+    return (
+      <div className="card p-5">
+        <EmptyState title="No events" description="Events will appear here as agents start reporting." />
+      </div>
+    );
   }
 
   return (
     <div className="card p-5">
-      <h3 className="mb-4 text-sm font-medium text-slate-200">Recent Events</h3>
-      <div className="divide-y divide-line/50">
-        {events.map((event) => (
-          <EventRow key={event.id} event={event} />
+      <h3 className="mb-3 text-sm font-medium text-slate-200">Recent Events</h3>
+      <div className="max-h-[320px] overflow-y-auto pr-1 scrollbar-thin">
+        {events.map((event, i) => (
+          <TimelineEntry key={event.id} event={event} index={i} />
         ))}
       </div>
     </div>
   );
 }
+
+function RecentEventsSkeleton() {
+  return (
+    <div className="card p-5 space-y-4">
+      <div className="h-4 w-24 rounded bg-elevated animate-shimmer" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.06), transparent)', backgroundSize: '200% 100%' }} />
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="flex items-start gap-3">
+          <div className="mt-2 h-2.5 w-2.5 rounded-full bg-elevated" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-16 rounded bg-elevated animate-shimmer" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.06), transparent)', backgroundSize: '200% 100%' }} />
+            <div className="h-3 w-40 rounded bg-elevated animate-shimmer" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.06), transparent)', backgroundSize: '200% 100%' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+

@@ -1,4 +1,4 @@
-export interface HealthResponse {
+﻿export interface HealthResponse {
   status: 'healthy' | 'unhealthy';
   database: 'connected' | 'disconnected';
   redis: 'connected' | 'disconnected';
@@ -117,3 +117,12 @@ export interface ApiError {
     message: string;
   };
 }
+
+/** Sparkline data point */
+export interface SparklinePoint {
+  x: string;
+  y: number;
+}
+
+/** Sortable host column keys */
+export type HostSortKey = 'hostname' | 'cpu_usage_percent' | 'memory.used_percent' | 'status';
