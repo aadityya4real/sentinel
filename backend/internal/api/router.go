@@ -11,13 +11,14 @@ import (
 
 // Handlers bundles all HTTP handlers required by the Sentinel API router.
 type Handlers struct {
-	Health       *HealthHandler
-	Metrics      *MetricsHandler
-	Events       *EventsHandler
-	Dashboard    *DashboardHandler
-	Replay       *ReplayHandler
-	TimeMachine  *TimeMachineHandler
-	AI           *AIHandler
+	Health      *HealthHandler
+	Metrics     *MetricsHandler
+	Events      *EventsHandler
+	Dashboard   *DashboardHandler
+	Replay      *ReplayHandler
+	TimeMachine *TimeMachineHandler
+	AI          *AIHandler
+	Websocket   *WebsocketHandler
 }
 
 // NewRouter creates the Sentinel HTTP router with standardized /api/v1 routes.
@@ -52,6 +53,8 @@ func NewRouter(handlers Handlers, logger *zap.Logger) http.Handler {
 			r.Post("/incidents/analyze", handlers.AI.AnalyzeIncident)
 		})
 	})
+
+	r.Get("/ws/v1/metrics", handlers.Websocket.Metrics)
 
 	return r
 }

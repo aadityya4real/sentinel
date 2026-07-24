@@ -108,6 +108,9 @@ func (a *App) Run() error {
 
 // cleanup releases all owned infrastructure connections. Safe to call multiple times.
 func (a *App) cleanup() {
+	if a.deps != nil && a.deps.Hub != nil {
+		a.deps.Hub.Close()
+	}
 	if a.redis != nil {
 		if err := a.redis.Close(); err != nil {
 			a.log.Error("close Redis", zap.Error(err))

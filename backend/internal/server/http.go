@@ -12,7 +12,7 @@ import (
 func buildHTTPServer(deps *Dependencies, logger *zap.Logger, addr string) *http.Server {
 	return &http.Server{
 		Addr:              addr,
-		Handler:           api.NewRouter(api.Handlers{Health: deps.Health, Metrics: deps.Metrics, Events: deps.Events, Dashboard: deps.Dashboard, Replay: deps.Replay, TimeMachine: deps.TimeMachine, AI: deps.AI}, logger),
+		Handler:           api.NewRouter(api.Handlers{Health: deps.Health, Metrics: deps.Metrics, Events: deps.Events, Dashboard: deps.Dashboard, Replay: deps.Replay, TimeMachine: deps.TimeMachine, AI: deps.AI, Websocket: deps.Websocket}, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

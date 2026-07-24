@@ -19,6 +19,8 @@ function generateMetrics(hostname: string, cpu: number, mem: number, offset = 0)
   };
 }
 
+export { generateMetrics };
+
 const hosts = [
   { name: 'prod-web-01', cpu: 42, mem: 68, status: 'active' as const },
   { name: 'prod-web-02', cpu: 55, mem: 72, status: 'active' as const },
@@ -29,6 +31,8 @@ const hosts = [
   { name: 'staging-api-01', cpu: 8, mem: 22, status: 'stale' as const },
   { name: 'dev-sandbox-01', cpu: 5, mem: 15, status: 'stale' as const },
 ];
+
+export { hosts as mockHostsConfig };
 
 export function mockOverview(): Overview {
   const active = hosts.filter((h) => h.status === 'active').length;

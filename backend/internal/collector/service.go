@@ -35,6 +35,11 @@ type EventAppender interface {
 	Append(ctx context.Context, event eventstore.NewEvent) (eventstore.Event, error)
 }
 
+// MetricBroadcaster fans out freshly collected metrics to live subscribers.
+type MetricBroadcaster interface {
+	Publish(ctx context.Context, metrics agent.Metrics) error
+}
+
 // Recorder records validated infrastructure metric events.
 type Recorder interface {
 	Record(ctx context.Context, metrics agent.Metrics) error
@@ -45,10 +50,11 @@ type Service struct {
 	repository MetricsRepository
 	events     EventAppender
 	cache      LatestMetricsCache
+	broadcast  MetricBroadcaster
 }
 
 // NewService creates a metric collection service from the supplied storage dependencies.
-func NewService(repository MetricsRepository, events EventAppender, cache LatestMetricsCache) (*Service, error) {
+func NewService(repository MetricsRepository, events EventAppender, cache LatestMetricsCache, broadcast MetricBroadcaster) (*Service, error) {
 	if repository == nil {
 		return nil, errors.New("metrics repository is required")
 	}
@@ -58,7 +64,10 @@ func NewService(repository MetricsRepository, events EventAppender, cache Latest
 	if cache == nil {
 		return nil, errors.New("latest metrics cache is required")
 	}
-	return &Service{repository: repository, events: events, cache: cache}, nil
+	if broadcast == nil {
+		return nil, errors.New("metric broadcaster is required")
+	}
+	return &Service{repository: repository, events: events, cache: cache, broadcast: broadcast}, nil
 }
 
 // Record validates a metric event, persists it, and refreshes the latest host snapshot.
@@ -78,6 +87,12 @@ func (s *Service) Record(ctx context.Context, metrics agent.Metrics) error {
 	}
 	if err := s.cache.Store(ctx, metrics); err != nil {
 		return fmt.Errorf("cache latest metric event: %w", err)
+	}
+	if err := s.broadcast.Publish(ctx, metrics); err != nil {
+		// Broadcasting is best-effort: the metric is already persisted and cached.
+		// We surface the failure via error wrapping so callers may log it, but we
+		// do not fail the Record since subscribers can catch up on the next tick.
+		return fmt.Errorf("broadcast metric event: %w", err)
 	}
 	return nil
 }

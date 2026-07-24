@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/aadityya4real/sentinel/backend/internal/ai"
@@ -15,6 +16,7 @@ import (
 	"github.com/aadityya4real/sentinel/backend/internal/redis"
 	"github.com/aadityya4real/sentinel/backend/internal/storage"
 	"github.com/aadityya4real/sentinel/backend/internal/timemachine"
+	"github.com/aadityya4real/sentinel/backend/internal/websocket"
 	"go.uber.org/zap"
 )
 
@@ -27,6 +29,8 @@ type Dependencies struct {
 	Replay      *api.ReplayHandler
 	TimeMachine *api.TimeMachineHandler
 	AI          *api.AIHandler
+	Websocket   *api.WebsocketHandler
+	Hub         *websocket.Hub
 }
 
 // buildDependencies wires the full dependency graph and returns assembled HTTP handlers.
@@ -66,7 +70,10 @@ func buildDependencies(cfg *config.Config, db *database.Database, redisClient *r
 		return nil, fmt.Errorf("create AI analyzer: %w", err)
 	}
 
-	service, err := collector.NewService(repository, events, cache)
+	hub := websocket.NewHub(log)
+	go hub.Run(context.Background())
+
+	service, err := collector.NewService(repository, events, cache, hub)
 	if err != nil {
 		return nil, fmt.Errorf("create collector service: %w", err)
 	}
@@ -108,6 +115,10 @@ func buildDependencies(cfg *config.Config, db *database.Database, redisClient *r
 	if err != nil {
 		return nil, fmt.Errorf("create AI handler: %w", err)
 	}
+	websocketHandler, err := api.NewWebsocketHandler(hub, log)
+	if err != nil {
+		return nil, fmt.Errorf("create websocket handler: %w", err)
+	}
 
 	return &Dependencies{
 		Health:      healthHandler,
@@ -117,6 +128,8 @@ func buildDependencies(cfg *config.Config, db *database.Database, redisClient *r
 		Replay:      replayHandler,
 		TimeMachine: timeMachineHandler,
 		AI:          aiHandler,
+		Websocket:   websocketHandler,
+		Hub:         hub,
 	}, nil
 }
 
