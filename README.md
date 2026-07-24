@@ -1,243 +1,124 @@
 ﻿# Sentinel
 
-Infrastructure observability, reimagined.
+Infrastructure monitoring with AI event analysis, event replay, and a real-time dashboard.
 
-Sentinel captures, stores, and analyzes infrastructure events in real time — giving you end-to-end visibility into your entire fleet with AI-powered anomaly detection, forensic event replay, and a production-grade dashboard.
+Three processes ingest host metrics, store events, and run AI analysis — all visible through a React frontend.
 
-## Architecture
+## What it does
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Sentinel Platform                         │
-├───────────┬──────────────┬──────────────┬───────────────────┤
-│   Agent   │    Server    │    Worker    │     Frontend      │
-│  Capture  │  API Gateway │  Processing  │   React Dashboard │
-└─────┬─────┴──────┬───────┴──────┬───────┴────────┬──────────┘
-      │           │              │                 │
-      ▼           ▼              ▼                 ▼
-  ┌────────┐ ┌──────────┐ ┌──────────┐    ┌──────────────┐
-  │ Events │ │ PostgreSQL│ │  Redis   │    │ Live Charts  │
-  │  Store │ │  (pgx)    │ │(pub/sub) │    │ WebSocket Hub│
-  └────────┘ └──────────┘ └──────────┘    └──────────────┘
-                                         ┌──────────────┐
-                                         │   AI Engine   │
-                                         │ Anomaly Detect│
-                                         └──────────────┘
-```
+- Collects CPU, memory, disk, network metrics from agents across your fleet
+- Stores everything in PostgreSQL with Redis for pub/sub between components
+- Runs anomaly detection through a pluggable AI pipeline (OpenAI-compatible endpoints)
+- Delivers live metric streams to the dashboard over WebSocket
+- Lets you replay historical events or time-travel through infrastructure state with snapshots
 
-## Core Capabilities
-
-### Fleet Monitoring
-- Real-time host discovery and metrics collection
-- Per-host CPU, memory, disk, and network telemetry
-- Interactive fleet overview with live status indicators
-- Deep-dive host detail pages with granular breakdowns
-
-### Event Intelligence
-- Structured event ingestion via agents across the fleet
-- Filterable event timeline with severity classification
-- Type-based filtering: CPU, memory, disk, host, network
-- Custom badge system for info, warning, and critical states
-
-### AI-Powered Analysis
-- Pluggable AI inference pipeline for anomaly detection
-- Natural-language explanations of infrastructure incidents
-- Configurable hostname and time-window analysis
-- Persistent analysis history with local storage
-
-### Forensic Time Machine
-- Replay infrastructure state at any point in the past
-- Interactive timeline slider with configurable step size
-- Snapshot comparison between two time points
-- 2-hour lookback window with 1-minute resolution
-
-### Real-Time Streaming
-- WebSocket-powered metric stream to connected dashboards
-- Connection status indicator with reconnection attempts
-- Live buffering with smooth chart updates
-- Framer Motion animations for fluid transitions
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| **Backend** | Go 1.25.2, Chi v5 router |
-| **Frontend** | React 19, TypeScript 5.7, Vite 6 |
-| **UI Framework** | TailwindCSS 3, Framer Motion |
-| **Data Viz** | Recharts, Sparklines, Gauges |
-| **State Management** | TanStack Query v5 |
-| **Database** | PostgreSQL 17 (pgx v5) |
-| **Pub/Sub** | Redis 8 (go-redis v9) |
-| **Configuration** | Viper |
-| **Logging** | Zap (Uber) |
-| **Containerization** | Docker Compose |
-
-## Project Layout
-
-```
-sentinel/
-├── backend/                      # Go backend
-│   ├── cmd/
-│   │   ├── server/               # API server & HTTP routes
-│   │   ├── agent/                # Infrastructure capture agent
-│   │   └── worker/               # Background processing daemon
-│   └── internal/
-│       ├── ai/                   # AI inference engine
-│       ├── alert/                # Alerting logic
-│       ├── api/                  # HTTP handlers
-│       ├── auth/                 # Authentication middleware
-│       ├── collector/            # Event ingestion layer
-│       ├── dashboard/            # Aggregated dashboard queries
-│       ├── database/             # PostgreSQL data access
-│       ├── events/               # Domain event types
-│       ├── eventstore/           # Event persistence
-│       ├── logger/               # Structured logging setup
-│       ├── metrics/              # System metrics collection
-│       ├── middleware/           # CORS, rate limiting, etc.
-│       ├── models/               # Shared type definitions
-│       ├── redis/                # Redis client & pub/sub
-│       ├── replay/               # Historical event retrieval
-│       ├── server/               # HTTP server configuration
-│       ├── storage/              # Object storage abstraction
-│       ├── timemachine/          # Time-travel debugging
-│       └── websocket/            # WebSocket hub implementation
-├── frontend/                     # React dashboard
-│   ├── public/
-│   │   └── sentinel.svg          # Brand asset
-│   └── src/
-│       ├── components/
-│       │   ├── charts/           # AreaChartCard, GaugeCard, Sparkline
-│       │   ├── dashboard/        # FleetOverviewCards, HostTable, etc.
-│       │   ├── timemachine/      # TimelineSlider, ReplayControls
-│       │   └── ui/               # Button, Badge, Card, Skeleton...
-│       ├── layouts/              # AppLayout, Sidebar, TopBar
-│       ├── pages/
-│       │   ├── DashboardPage     # Fleet overview + live metrics
-│       │   ├── EventsPage        # Filterable event timeline
-│       │   ├── HostsPage         # Host inventory list
-│       │   ├── HostDetailPage    # Single host deep-dive
-│       │   ├── ReplayPage        # Event replay viewer
-│       │   ├── TimeMachinePage   # Forensic timeline tool
-│       │   ├── AIPage            # AI incident analyzer
-│       │   └── SettingsPage      # Configuration panel
-│       ├── services/             # API client + mock data
-│       ├── hooks/                # useMetricStream, etc.
-│       └── types/                # TypeScript type definitions
-├── docs/
-│   ├── adr/                      # Architectural Decision Records
-│   ├── api/                      # API documentation
-│   ├── architecture/             # System architecture docs
-│   └── design/                   # Design specifications
-├── deployments/                  # Kubernetes manifests
-├── scripts/                      # Dev helper scripts
-├── docker-compose.yml            # Local infrastructure stack
-└── .env.example                  # Environment template
-```
-
-## Getting Started
-
-### Prerequisites
-
-- **Go** 1.25.2 or later
-- **Node.js** 18+ with npm
-- **Docker** and Docker Compose
-
-### Infrastructure
+## Quick start
 
 ```bash
+git clone https://github.com/aadityya4real/sentinel.git
+cd sentinel
+
 docker compose up -d
+
+cp .env.example .env
 ```
 
-This starts PostgreSQL 17 and Redis 8 with health checks, persistent volumes, and sensible defaults.
-
-### Backend
+Start the three backend processes:
 
 ```bash
 cd backend
-
-# Copy configuration
-cp ../.env.example .env
-
-# Start the API server
-go run ./cmd/server
-
-# Start the event capture agent (separate terminal)
-go run ./cmd/agent
-
-# Start the background processor (separate terminal)
-go run ./cmd/worker
+go run ./cmd/server   # API server on :8080
+go run ./cmd/agent    # event collector
+go run ./cmd/worker   # AI inference + background processing
 ```
 
-### Frontend
+Then the frontend:
 
 ```bash
-cd frontend
-
+cd ../frontend
 npm install
 npm run dev
 ```
 
-The dashboard opens at [http://localhost:5173](http://localhost:5173).
+Dashboard at `http://localhost:5173`.
 
-## Configuration
+If you haven't wired up the backend yet, set `VITE_USE_MOCK_DATA=true` in `.env` — the frontend falls back to mock data for every page.
 
-All settings are managed through **[Viper](https://github.com/spf13/viper)**. The configuration priority is:
+## Pages
 
-```
-Environment Variables > .env file > config file > defaults
-```
-
-### Key Variables
-
-| Variable | Purpose | Example |
-|---|---|---|
-| `APP_PORT` | HTTP listener port | `8080` |
-| `APP_ENV` | Runtime environment | `development` |
-| `LOG_LEVEL` | Verbosity level | `debug` |
-| `POSTGRES_HOST` | Database address | `localhost` |
-| `POSTGRES_PORT` | Database port | `5432` |
-| `POSTGRES_USER` | Database user | `sentinel` |
-| `POSTGRES_PASSWORD` | Database password | `sentinel` |
-| `POSTGRES_DB` | Database name | `sentinel` |
-| `REDIS_HOST` | Redis address | `localhost` |
-| `REDIS_PORT` | Redis port | `6379` |
-| `AI_ENABLED` | Toggle AI pipeline | `false` |
-| `AI_BASE_URL` | Inference endpoint | `https://api.openai.com/v1` |
-| `AI_API_KEY` | API credential | — |
-| `AI_MODEL` | Model identifier | `gpt-5-mini` |
-
-See `.env.example` for the complete reference.
-
-## Dashboard
-
-| Page | Description |
+| Route | What it shows |
 |---|---|
-| **Dashboard** | Fleet-wide overview with live metric streams, host table, recent events, and AI insights |
-| **Hosts** | Inventory of all monitored hosts with aggregate health status |
-| **Host Detail** | Granular per-host metrics, events, and configuration |
-| **Events** | Full event log with severity badges and multi-category filters |
-| **Replay** | Review historical events with time-filtered search |
-| **Time Machine** | Forensic playback of infrastructure state with snapshot comparison |
-| **AI** | Incident analyzer — select a host and time range, get natural-language analysis |
-| **Settings** | System configuration and preferences |
+| `/dashboard` | Fleet overview: host count, live charts, recent events, AI insights card |
+| `/hosts` | Full host inventory with search |
+| `/hosts/:hostname` | Single host history: CPU/memory area charts over configurable time range |
+| `/events` | Event timeline with severity filtering (CPU, memory, disk, network, etc.) |
+| `/replay` | Filter and review past events by time range |
+| `/time-machine` | Animated timeline slider — scrub through the last 2 hours of host snapshots with comparison views |
+| `/ai` | Type a hostname and time window, get a natural-language analysis of what happened |
+| `/settings` | App config: API URL, refresh interval, version info |
 
-### Visual Design
+## Backend structure
 
-- Dark color scheme (`#0a0a0f` base) with purple accent (`#7c3aed`)
-- Inter for body text, JetBrains Mono for code and monospaced data
-- Rounded cards with subtle borders and glow effects
-- Smooth page transitions via Framer Motion
+Three binaries share the same Go module:
 
-## Contributing
+```
+backend/
+├── cmd/server/      REST API (Chi router), WebSocket hub, auth middleware
+├── cmd/agent/       Host-level metric collection via gopsutil
+└── cmd/worker/      AI inference dispatch + alert evaluation
+    internal/
+        ├── ai/          OpenAI-compatible endpoint integration
+        ├── alert/       Rule-based alerting
+        ├── api/         HTTP handlers per route
+        ├── auth/        Token validation middleware
+        ├── collector/   Metric ingestion from agents
+        ├── dashboard/   Aggregated queries for the fleet overview
+        ├── database/    PostgreSQL via pgx
+        ├── events/      Domain event types
+        ├── eventstore/  Event persistence layer
+        ├── logger/      Zap structured logging
+        ├── metrics/     Host metric types and aggregation
+        ├── middleware/  CORS, recovery, logging
+        ├── models/      Shared structs
+        ├── redis/       go-redis client + pub/sub channels
+        ├── replay/      Historical event retrieval
+        ├── server/      HTTP server bootstrap
+        ├── storage/     Object storage interface (local/S3)
+        ├── timemachine/ Snapshot creation and comparison
+        └── websocket/   Broadcast hub for live metric streaming
+```
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/name`
-3. Make your changes
-4. Commit with conventional commits: `git commit -m "feat: description"`
-5. Push: `git push origin feature/name`
-6. Open a Pull Request
+Configuration uses Viper — env vars, `.env` file, then defaults. See `.env.example`.
 
-Code should follow Go formatting standards (`gofmt`, `golint`) and TypeScript strict mode rules.
+## Frontend stack
+
+React 19 + TypeScript, Vite build, TailwindCSS. No Redux or Zustand — TanStack Query handles server state, local state stays in components. Charts are Recharts with custom area/spline rendering. Animations use Framer Motion (page transitions, staggered list entries).
+
+Components fall into four buckets: charts (AreaChartCard, GaugeCard, Sparkline), dashboard (FleetOverviewCards, HostTable, LiveInfrastructureCharts, RecentEventsTimeline), timemachine (TimelineSlider, ReplayControls, SnapshotComparison), and shared UI primitives (Badge, Button, Card, EmptyState, ErrorState, Skeleton, Spinner).
+
+Mock data is in `services/mock/events.ts` and generates timestamped infrastructure events across five fake hosts for development without a running backend.
+
+## Architecture
+
+Agent collects metrics → forwards to Server via gRPC/HTTP → Server writes to PostgreSQL and publishes to Redis pub/sub → Dashboard subscribes via WebSocket → AI Worker analyzes events in parallel.
+
+Event replay pulls from the PostgreSQL event store. Time Machine takes periodic snapshots and lets you compare two points in time.
+
+## Development
+
+```bash
+# Backend only (with Docker infra)
+cd backend && go run ./cmd/server
+
+# Frontend only (mock mode)
+cd frontend && npm run dev
+
+# Both
+# Terminal 1: cd backend && go run ./cmd/server
+# Terminal 2: cd frontend && npm run dev
+```
+
+Docker Compose manages PostgreSQL 17 and Redis 8 with health checks and persistent volumes. The default credentials in `.env.example` match the compose setup out of the box.
 
 ## License
 
