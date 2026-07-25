@@ -1,8 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+﻿import { useQuery } from '@tanstack/react-query';
 import { apiGet, USE_MOCK_DATA } from '@/services/http';
 import { withMockFallback } from '@/services/mock';
 import { mockOverview, mockHostsPage } from '@/services/mock/dashboard';
 import type { Overview, HostsPage, History } from '@/types/api';
+import { getRefreshInterval } from './refresh';
 
 async function fetchOverview(): Promise<Overview> {
   return apiGet<Overview>('/api/v1/dashboard/overview');
@@ -32,6 +33,7 @@ export function useOverview() {
         enabled: USE_MOCK_DATA,
         isEmpty: isEmptyOverview,
       }),
+    refetchInterval: () => getRefreshInterval(),
   });
 }
 
@@ -43,6 +45,7 @@ export function useHosts(limit = 100) {
         enabled: USE_MOCK_DATA,
         isEmpty: isEmptyHosts,
       }),
+    refetchInterval: () => getRefreshInterval(),
   });
 }
 
