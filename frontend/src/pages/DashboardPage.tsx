@@ -10,7 +10,6 @@ import { RecentEventsTimeline } from '@/components/dashboard/RecentEventsTimelin
 import { HostTable } from '@/components/dashboard/HostTable';
 import { StreamStatusBadge } from '@/components/dashboard/StreamStatusBadge';
 
-
 /* ── helpers ─────────────────────────────────────────── */
 
 interface ChartPoint {
@@ -38,72 +37,105 @@ export default function DashboardPage() {
   const loading = oLoading || hLoading;
   const anyError = oError || hError;
 
-  /* ── fetch history for each host ── */
-  const historyResults = useMemo(() => {
-    const hostnames = hosts.slice(0, 4).map((h) => h.metrics.hostname);
-    return hostnames.map((name) => ({
-      hostname: name,
-      history: useHistory(name, 100).data,
-    }));
-  }, [JSON.stringify(hosts.map((h) => h.metrics.hostname))]);
+  /* ── history queries — called at top level so React Query can manage them ── */
+  const firstFourHostnames = hosts.slice(0, 4).map((h) => h.metrics.hostname);
+
+  // We always call hooks for a fixed set of hostnames to keep the hook call count stable.
+  // If there are fewer than 4 hosts we alias them; extra ones resolve to empty strings
+  // and the query simply returns no results.
+  const n1 = firstFourHostnames[0] ?? '';
+  const n2 = firstFourHostnames[1] ?? '';
+  const n3 = firstFourHostnames[2] ?? '';
+  const n4 = firstFourHostnames[3] ?? '';
+
+  const h1 = useHistory(n1, 100);
+  const h2 = useHistory(n2, 100);
+  const h3 = useHistory(n3, 100);
+  const h4 = useHistory(n4, 100);
 
   /* ── prefers WebSocket buffer when available ── */
   const hasBuffer = buffer.length > 2;
 
-  /* ── build chart data from real history API ── */
-  const chartDataFromHistory = useMemo(() => {
-    if (hasBuffer) return null;
-
-    let cpuPoints: ChartPoint[] = [];
-    let memPoints: ChartPoint[] = [];
-    let diskPoints: ChartPoint[] = [];
-    let netPoints: ChartPoint[] = [];
-
-    for (const entry of historyResults) {
-      const hist = entry.history;
-      if (!hist?.metrics?.length) continue;
-
-      for (const m of hist.metrics) {
-        const ts = new Date(m.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-        cpuPoints.push({ timestamp: ts, value: m.cpu_usage_percent });
-        memPoints.push({ timestamp: ts, value: m.memory.used_percent });
-        const diskPct = m.disks && m.disks[0]?.used_percent != null ? m.disks[0].used_percent : 0;
-        diskPoints.push({ timestamp: ts, value: diskPct });
-        netPoints.push({ timestamp: ts, value: Math.floor(30 + Math.sin(netPoints.length) * 15) });
-      }
-    }
-
-    return { cpu: cpuPoints, mem: memPoints, disk: diskPoints, net: netPoints };
-  }, [hasBuffer, historyResults]);
-
-  /* ── use buffer or history ── */
-  const cpuData: ChartPoint[] = hasBuffer
-    ? buffer.map((m) => ({
+  /* ── build chart data from real history API or WS buffer ── */
+  const cpuData = useMemo<ChartPoint[]>(() => {
+    if (hasBuffer && buffer.length > 2) {
+      return buffer.map((m) => ({
         timestamp: new Date(m.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
         value: m.cpu_usage_percent,
-      }))
-    : chartDataFromHistory?.cpu ?? [];
+      }));
+    }
+    let points: ChartPoint[] = [];
+    for (const hist of [h1.data, h2.data, h3.data, h4.data]) {
+      if (!hist?.metrics?.length) continue;
+      for (const m of hist.metrics) {
+        points.push({
+          timestamp: new Date(m.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          value: m.cpu_usage_percent,
+        });
+      }
+    }
+    return points;
+  }, [hasBuffer, buffer, h1.data, h2.data, h3.data, h4.data]);
 
-  const memData: ChartPoint[] = hasBuffer
-    ? buffer.map((m) => ({
+  const memData = useMemo<ChartPoint[]>(() => {
+    if (hasBuffer && buffer.length > 2) {
+      return buffer.map((m) => ({
         timestamp: new Date(m.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
         value: m.memory.used_percent,
-      }))
-    : chartDataFromHistory?.mem ?? [];
+      }));
+    }
+    let points: ChartPoint[] = [];
+    for (const hist of [h1.data, h2.data, h3.data, h4.data]) {
+      if (!hist?.metrics?.length) continue;
+      for (const m of hist.metrics) {
+        points.push({
+          timestamp: new Date(m.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          value: m.memory.used_percent,
+        });
+      }
+    }
+    return points;
+  }, [hasBuffer, buffer, h1.data, h2.data, h3.data, h4.data]);
 
-  const diskData: ChartPoint[] = hasBuffer
-    ? buffer.map((m) => ({
+  const diskData = useMemo<ChartPoint[]>(() => {
+    if (hasBuffer && buffer.length > 2) {
+      return buffer.map((m) => ({
         timestamp: new Date(m.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
         value: m.disks[0]?.used_percent ?? 0,
-      }))
-    : chartDataFromHistory?.disk ?? [];
+      }));
+    }
+    let points: ChartPoint[] = [];
+    for (const hist of [h1.data, h2.data, h3.data, h4.data]) {
+      if (!hist?.metrics?.length) continue;
+      for (const m of hist.metrics) {
+        points.push({
+          timestamp: new Date(m.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          value: m.disks[0]?.used_percent ?? 0,
+        });
+      }
+    }
+    return points;
+  }, [hasBuffer, buffer, h1.data, h2.data, h3.data, h4.data]);
 
-  const netData: ChartPoint[] = hasBuffer
-    ? buffer.map((_, i) => ({
+  const netData = useMemo<ChartPoint[]>(() => {
+    if (hasBuffer && buffer.length > 2) {
+      return buffer.map((_, i) => ({
         timestamp: new Date(Date.now() - (buffer.length - i) * 60_000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
         value: Math.floor(30 + Math.sin(i * 0.5) * 20),
-      }))
-    : chartDataFromHistory?.net ?? [];
+      }));
+    }
+    let points: ChartPoint[] = [];
+    for (const hist of [h1.data, h2.data, h3.data, h4.data]) {
+      if (!hist?.metrics?.length) continue;
+      for (const m of hist.metrics) {
+        points.push({
+          timestamp: new Date(m.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          value: Math.floor(30 + Math.sin(points.length) * 15),
+        });
+      }
+    }
+    return points;
+  }, [hasBuffer, buffer, h1.data, h2.data, h3.data, h4.data]);
 
   /* ── sparklines & trends ── */
   const displayCpuSpark = hasBuffer
