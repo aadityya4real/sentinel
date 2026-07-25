@@ -1,16 +1,51 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    color-scheme: dark;
-  }
+/* ── default (dark) theme via :root ─────────────────────── */
+:root {
+  color-scheme: dark;
+}
 
+/* ── dark class (Tailwind darkMode: 'class') ────────────── */
+.dark {
+  color-scheme: dark;
+  --bg-base: #0a0a0f;
+  --bg-surface: #13131a;
+  --bg-elevated: #1c1c26;
+  --border-line: #27272f;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #475569;
+  --accent: #7c3aed;
+  --accent-bright: #8b5cf6;
+  --glow-shadow: rgba(124, 58, 237, 0.45);
+  --card-bg: var(--bg-surface);
+  --table-row-hover: rgba(28, 28, 38, 0.5);
+}
+
+/* light theme overrides when .dark is NOT present AND we need light */
+.light-mode {
+  color-scheme: light;
+  --bg-base: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f1f5f9;
+  --border-line: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent: #7c3aed;
+  --accent-bright: #6d28d9;
+  --glow-shadow: rgba(124, 58, 237, 0.15);
+  --card-bg: var(--bg-surface);
+  --table-row-hover: rgba(241, 245, 249, 0.8);
+}
+
+@layer base {
   * {
-    @apply border-line;
+    border-color: var(--border-line, #27272f);
   }
 
   html,
@@ -20,9 +55,11 @@
   }
 
   body {
-    @apply bg-base text-slate-100 antialiased;
+    background-color: var(--bg-base, #0a0a0f);
+    color: var(--text-primary, #f1f5f9);
     font-feature-settings: 'cv11', 'ss01';
     font-variation-settings: 'opsz' 32;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   ::-webkit-scrollbar {
@@ -33,20 +70,31 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-line;
+    @apply rounded-full;
+    background-color: var(--border-line, #27272f);
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-slate-600;
+    background-color: var(--text-muted, #475569);
   }
 
   :focus-visible {
-    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-base;
+    outline: none;
+    ring: 2px solid var(--accent, #7c3aed);
+    ring-offset: 2px;
+    ring-offset-color: var(--bg-base, #0a0a0f);
   }
 }
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-line bg-surface shadow-card;
+    @apply rounded-2xl border shadow-card;
+    border-color: var(--border-line, #27272f);
+    background-color: var(--card-bg, var(--bg-surface, #13131a));
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  .light-mode .card {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08);
   }
 }
 

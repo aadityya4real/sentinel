@@ -1,18 +1,22 @@
-/** @type {import('tailwindcss').Config} */
+﻿/** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: 'class',
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        base: '#0a0a0f',
-        surface: '#13131a',
-        elevated: '#1c1c26',
-        line: '#27272f',
+        base: 'var(--bg-base, #0a0a0f)',
+        surface: 'var(--bg-surface, #13131a)',
+        elevated: 'var(--bg-elevated, #1c1c26)',
+        line: 'var(--border-line, #27272f)',
         accent: {
-          DEFAULT: '#7c3aed',
-          bright: '#8b5cf6',
-          soft: '#8b5cf633',
+          DEFAULT: 'var(--accent, #7c3aed)',
+          bright: 'var(--accent-bright, #8b5cf6)',
+          soft: 'rgba(124, 58, 237, 0.2)',
+        },
+        text: {
+          primary: 'var(--text-primary, #f1f5f9)',
+          secondary: 'var(--text-secondary, #94a3b8)',
+          muted: 'var(--text-muted, #475569)',
         },
       },
       fontFamily: {
@@ -21,7 +25,7 @@ export default {
       },
       boxShadow: {
         card: '0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3)',
-        glow: '0 0 24px -6px rgb(124 58 237 / 0.45)',
+        glow: '0 0 24px -6px var(--glow-shadow, rgba(124, 58, 237, 0.45))',
       },
       keyframes: {
         'fade-in': {
@@ -38,5 +42,5 @@ export default {
       },
     },
   },
-  plugins: [],
+  darkMode: 'class',
 };

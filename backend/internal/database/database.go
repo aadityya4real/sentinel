@@ -1,4 +1,4 @@
-// Package database manages Sentinel's PostgreSQL connection and schema migrations.
+﻿// Package database manages Sentinel's PostgreSQL connection and schema migrations.
 package database
 
 import (
@@ -31,7 +31,7 @@ func New(ctx context.Context, connectionString string) (*Database, error) {
 		return nil, fmt.Errorf("create PostgreSQL pool: %w", err)
 	}
 
-	pingContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+	pingContext, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if err := pool.Ping(pingContext); err != nil {
 		pool.Close()
@@ -50,3 +50,4 @@ func (d *Database) Close() {
 func (d *Database) Ping(ctx context.Context) error {
 	return d.Pool.Ping(ctx)
 }
+

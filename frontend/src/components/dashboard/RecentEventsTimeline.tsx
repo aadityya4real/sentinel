@@ -3,24 +3,27 @@ import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { Event } from '@/types/api';
 
-/** Maps an event type string to a severity badge variant + dot color */
-function classifyEvent(type: string): { variant: 'info' | 'active' | 'critical'; color: string; label: string } {
-  if (type.includes('critical')) return { variant: 'critical', color: '#f43f5e', label: 'Critical' };
-  if (type.includes('warning') || type.includes('spike') || type.includes('error')) return { variant: 'active', color: '#f59e0b', label: 'Warning' };
-  if (type.includes('restarted') || type.includes('started') || type.includes('deployed')) return { variant: 'info', color: '#10b981', label: 'Info' };
-  if (type.includes('recovered') || type.includes('health')) return { variant: 'info', color: '#3b82f6', label: 'Recovered' };
-  return { variant: 'info', color: '#7c3aed', label: 'Info' };
-}
-
-function formatEventType(type: string): string {
-  // infrastructure.cpu.spike -> CPU Spike
-  const parts = type.split('.').slice(-2);
-  return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
-}
-
 interface TimelineEntryProps {
   event: Event;
   index: number;
+}
+
+interface RecentEventsTimelineProps {
+  events: Event[];
+  isLoading?: boolean;
+}
+
+function classifyEvent(type: string) {
+  if (type.includes('critical')) return { variant: 'critical' as const, color: '#f43f5e', label: 'Critical' };
+  if (type.includes('warning') || type.includes('spike') || type.includes('error')) return { variant: 'active' as const, color: '#f59e0b', label: 'Warning' };
+  if (type.includes('restarted') || type.includes('started') || type.includes('deployed')) return { variant: 'info' as const, color: '#10b981', label: 'Info' };
+  if (type.includes('recovered') || type.includes('health')) return { variant: 'info' as const, color: '#3b82f6', label: 'Recovered' };
+  return { variant: 'info' as const, color: '#7c3aed', label: 'Info' };
+}
+
+function formatEventType(type: string) {
+  const parts = type.split('.').slice(-2);
+  return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
 }
 
 export function TimelineEntry({ event, index }: TimelineEntryProps) {
@@ -34,34 +37,24 @@ export function TimelineEntry({ event, index }: TimelineEntryProps) {
       transition={{ delay: index * 0.03 }}
       className="group flex items-start gap-3 py-2.5 last:pb-0"
     >
-      {/* vertical timeline line */}
       <div className="flex flex-col items-center">
-        <div className="mt-1.5 h-2.5 w-2.5 rounded-full shrink-0 ring-4 ring-base" style={{ backgroundColor: color }} />
+        <div className="mt-1.5 h-2.5 w-2.5 rounded-full shrink-0 ring-4 ring-surface" style={{ backgroundColor: color }} />
       </div>
-
-      {/* content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant={variant}>{label}</Badge>
-          <span className="text-xs font-mono text-slate-500">{event.subject_id}</span>
+          <span className="text-xs font-mono text-text-muted">{event.subject_id}</span>
         </div>
-        <p className="mt-0.5 text-sm text-slate-300">{description}</p>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <p className="mt-0.5 text-sm text-text-primary">{description}</p>
+        <p className="mt-0.5 text-xs text-text-muted">
           {new Date(event.occurred_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
         </p>
       </div>
-
-      {/* right-side metadata (visible on hover) */}
-      <span className="hidden sm:block text-xs text-slate-600 tabular-nums group-hover:text-slate-400 transition-colors">
+      <span className="hidden sm:block text-xs text-text-muted tabular-nums group-hover:text-text-secondary transition-colors">
         {event.key}
       </span>
     </motion.div>
   );
-}
-
-interface RecentEventsTimelineProps {
-  events: Event[];
-  isLoading: boolean;
 }
 
 export function RecentEventsTimeline({ events, isLoading }: RecentEventsTimelineProps) {
@@ -79,7 +72,7 @@ export function RecentEventsTimeline({ events, isLoading }: RecentEventsTimeline
 
   return (
     <div className="card p-5">
-      <h3 className="mb-3 text-sm font-medium text-slate-200">Recent Events</h3>
+      <h3 className="mb-3 text-sm font-medium text-text-primary">Recent Events</h3>
       <div className="max-h-[320px] overflow-y-auto pr-1 scrollbar-thin">
         {events.map((event, i) => (
           <TimelineEntry key={event.id} event={event} index={i} />
@@ -105,4 +98,3 @@ function RecentEventsSkeleton() {
     </div>
   );
 }
-

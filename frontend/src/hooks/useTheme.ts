@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import type { Theme } from '@/types/domain';
 
 const STORAGE_KEY = 'sentinel-theme';
@@ -13,7 +13,11 @@ export function useTheme() {
 
   useEffect(() => {
     const root = document.documentElement;
+    root.classList.remove('light-mode');
     root.classList.toggle('dark', theme === 'dark');
+    if (theme === 'light') {
+      root.classList.add('light-mode');
+    }
     localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
 
