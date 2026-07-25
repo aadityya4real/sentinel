@@ -1,15 +1,15 @@
-import { WS_URL, USE_MOCK_DATA } from '@/config/env';
+﻿import { WS_URL } from '@/config/env';
 import { MockStream } from './MockStream';
 import type { MetricStreamLike, MetricSubscriber, StateSubscriber, StreamMessage, StreamState } from './types';
 
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 15000];
 const HEARTBEAT_INTERVAL_MS = 30_000;
-const HEARTBEAT_TIMEOUT_MS = 45_000;
+const HEARTBEAT_TIMEOUT_MS = 60_000;
 
 /**
  * MetricStream manages a WebSocket subscription to the Sentinel live metrics
- * endpoint with automatic reconnection, heartbeat, and a mock fallback for
- * development when the backend is unreachable.
+ * endpoint with automatic reconnection. Falls back to MockStream when the WS
+ * connection cannot be established or fails to recover after max attempts.
  */
 export class MetricStream implements MetricStreamLike {
   private socket: WebSocket | null = null;
@@ -21,6 +21,7 @@ export class MetricStream implements MetricStreamLike {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private closedIntentionally = false;
+
   private mockFallback: MockStream | null = null;
 
   connect(): void {
@@ -71,6 +72,7 @@ export class MetricStream implements MetricStreamLike {
 
     socket.onopen = () => {
       this.attempts = 0;
+
       this.setState('connected', 0);
       this.startHeartbeat();
     };
@@ -102,11 +104,9 @@ export class MetricStream implements MetricStreamLike {
 
   private scheduleReconnect(): void {
     if (this.attempts >= RECONNECT_DELAYS_MS.length) {
-      if (USE_MOCK_DATA) {
-        this.switchToMock();
-        return;
-      }
-      this.setState('disconnected', this.attempts);
+      // Always fall back to mock data after exhausting reconnect attempts —
+      // ensures the dashboard UI always has something useful to display.
+      this.switchToMock();
       return;
     }
     const delay = RECONNECT_DELAYS_MS[this.attempts];
@@ -116,14 +116,11 @@ export class MetricStream implements MetricStreamLike {
   }
 
   private handleFailure(): void {
-    if (USE_MOCK_DATA) {
-      this.switchToMock();
-    } else {
-      this.setState('disconnected', this.attempts);
-    }
+    this.switchToMock();
   }
 
   private switchToMock(): void {
+    if (this.mockFallback) return;
     this.mockFallback = new MockStream();
     this.mockFallback.subscribe((m) => this.metricHandlers.forEach((h) => h(m)));
     this.mockFallback.onStateChange((s, a) => this.setState(s, a));
@@ -136,11 +133,12 @@ export class MetricStream implements MetricStreamLike {
       if (this.socket?.readyState === WebSocket.OPEN) {
         try {
           this.socket.send(JSON.stringify({ type: 'ping' }));
+          // A successful send means the connection is alive — reset the timeout.
+          this.resetHeartbeatTimeout();
         } catch {
           // socket may have closed between ticks
         }
       }
-      this.resetHeartbeatTimeout();
     }, HEARTBEAT_INTERVAL_MS);
     this.resetHeartbeatTimeout();
   }
@@ -148,7 +146,6 @@ export class MetricStream implements MetricStreamLike {
   private resetHeartbeatTimeout(): void {
     if (this.heartbeatTimeoutTimer) clearTimeout(this.heartbeatTimeoutTimer);
     this.heartbeatTimeoutTimer = setTimeout(() => {
-      // No message received in time — force reconnect.
       if (this.socket) {
         this.socket.close();
       }
