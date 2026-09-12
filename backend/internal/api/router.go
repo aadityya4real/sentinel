@@ -32,8 +32,10 @@ func NewRouter(handlers Handlers, logger *zap.Logger) http.Handler {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/health", handlers.Health.ServeHTTP)
+
 		r.Post("/metrics", handlers.Metrics.ServeHTTP)
 		r.Post("/events", handlers.Events.ServeHTTP)
+		r.Get("/events", handlers.Events.List)
 
 		r.Route("/dashboard", func(r chi.Router) {
 			r.Get("/overview", handlers.Dashboard.Overview)

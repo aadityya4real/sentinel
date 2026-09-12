@@ -16,6 +16,7 @@ import (
 // Store appends immutable infrastructure events.
 type Store interface {
 	Append(ctx context.Context, event eventstore.NewEvent) (eventstore.Event, error)
+	List(ctx context.Context, filter eventstore.Filter) ([]eventstore.Event, error)
 }
 
 // LatestStateStore stores the most recent event submitted by each host.
@@ -60,6 +61,11 @@ func (c *Collector) Collect(ctx context.Context, event models.Event) (eventstore
 		return eventstore.Event{}, fmt.Errorf("cache latest state: %w", err)
 	}
 	return stored, nil
+}
+
+// List returns a page of infrastructure events matching the given filter.
+func (c *Collector) List(ctx context.Context, filter eventstore.Filter) ([]eventstore.Event, error) {
+	return c.store.List(ctx, filter)
 }
 
 // ValidationError identifies an event payload rejected before storage.

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/aadityya4real/sentinel/backend/internal/eventstore"
 	"github.com/aadityya4real/sentinel/backend/internal/events"
@@ -11,9 +14,25 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defaultEventsLimit = 50
+	maxEventsLimit     = 500
+	eventsDefaultBack  = 24 * time.Hour
+	eventsMaxRange     = 30 * 24 * time.Hour
+)
+
+// EventList contains a page of infrastructure events.
+type EventList struct {
+	Events []eventstore.Event `json:"events"`
+	Limit  int                `json:"limit"`
+	From   *time.Time         `json:"from,omitempty"`
+	To     *time.Time         `json:"to,omitempty"`
+}
+
 // EventCollector receives and persists infrastructure events from Sentinel Agents.
 type EventCollector interface {
 	Collect(ctx context.Context, event models.Event) (eventstore.Event, error)
+	List(ctx context.Context, filter eventstore.Filter) ([]eventstore.Event, error)
 }
 
 // EventsHandler receives infrastructure events from Sentinel Agents.
@@ -64,4 +83,82 @@ func (h *EventsHandler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	writeJSON(writer, http.StatusAccepted, map[string]any{"status": "accepted", "event_id": stored.ID})
+}
+
+// List returns a page of infrastructure events for dashboard and events pages.
+func (h *EventsHandler) List(writer http.ResponseWriter, request *http.Request) {
+	filter := eventstore.Filter{Limit: defaultEventsLimit}
+
+	if subjectType := request.URL.Query().Get("subject_type"); subjectType != "" {
+		filter.SubjectType = strings.TrimSpace(subjectType)
+	}
+	if subjectID := request.URL.Query().Get("subject_id"); subjectID != "" {
+		filter.SubjectID = strings.TrimSpace(subjectID)
+	}
+	if eventType := request.URL.Query().Get("type"); eventType != "" {
+		filter.Type = strings.TrimSpace(eventType)
+	}
+
+	fromStr := request.URL.Query().Get("from")
+	toStr := request.URL.Query().Get("to")
+
+	from, to, err := parseEventTimeRange(fromStr, toStr, eventsDefaultBack, eventsMaxRange)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, "invalid_time_range", err.Error())
+		return
+	}
+	filter.From = from
+	filter.To = to
+
+	if limitStr := request.URL.Query().Get("limit"); limitStr != "" {
+		limit, parseErr := strconv.Atoi(limitStr)
+		if parseErr != nil || limit < 1 || limit > maxEventsLimit {
+			writeError(writer, http.StatusBadRequest, "invalid_limit", "limit must be between 1 and "+strconv.Itoa(maxEventsLimit))
+			return
+		}
+		filter.Limit = limit
+	}
+
+	evts, err := h.collector.List(request.Context(), filter)
+	if err != nil {
+		h.logger.Error("list events", zap.Error(err))
+		writeError(writer, http.StatusServiceUnavailable, "events_unavailable", "event list is temporarily unavailable")
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, EventList{
+		Events: evts,
+		Limit:  filter.Limit,
+		From:   &from,
+		To:     &to,
+	})
+}
+
+// parseEventTimeRange returns from/to times with sensible defaults.
+func parseEventTimeRange(rawFrom, rawTo string, defaultBack, maximum time.Duration) (time.Time, time.Time, error) {
+	now := time.Now().UTC()
+	from := now.Add(-defaultBack)
+	to := now
+
+	var err error
+	if rawFrom != "" {
+		from, err = time.Parse(time.RFC3339, rawFrom)
+		if err != nil {
+			return time.Time{}, time.Time{}, errors.New("from must be an RFC3339 timestamp")
+		}
+	}
+	if rawTo != "" {
+		to, err = time.Parse(time.RFC3339, rawTo)
+		if err != nil {
+			return time.Time{}, time.Time{}, errors.New("to must be an RFC3339 timestamp")
+		}
+	}
+	if from.After(to) {
+		return time.Time{}, time.Time{}, errors.New("from must be before or equal to to")
+	}
+	if to.Sub(from) > maximum {
+		return time.Time{}, time.Time{}, errors.New("time range must not exceed thirty days")
+	}
+
+	return from.UTC(), to.UTC(), nil
 }

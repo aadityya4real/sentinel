@@ -20,6 +20,10 @@ func (s *storeStub) Append(_ context.Context, event eventstore.NewEvent) (events
 	return eventstore.Event{ID: 7}, nil
 }
 
+func (s *storeStub) List(_ context.Context, _ eventstore.Filter) ([]eventstore.Event, error) {
+	return []eventstore.Event{}, nil
+}
+
 type cacheStub struct {
 	event models.Event
 	calls int

@@ -19,6 +19,10 @@ func (eventStoreStub) Append(context.Context, eventstore.NewEvent) (eventstore.E
 	return eventstore.Event{ID: 1}, nil
 }
 
+func (eventStoreStub) List(context.Context, eventstore.Filter) ([]eventstore.Event, error) {
+	return []eventstore.Event{}, nil
+}
+
 type latestEventStub struct{}
 
 func (latestEventStub) Store(context.Context, models.Event) error { return nil }
