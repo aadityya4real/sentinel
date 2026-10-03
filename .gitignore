@@ -1,0 +1,41 @@
+# Go build outputs and test artifacts
+/backend/*.exe
+/backend/*.exe~
+/backend/agent
+/backend/server
+/backend/forward
+/backend/bin/
+/backend/build/
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Node dependencies and frontend build output
+/frontend/node_modules/
+/frontend/dist/
+/frontend/build/
+*.tsbuildinfo
+/frontend/vite.config.js
+/frontend/vite.config.d.ts
+
+# Local environment files; keep committed templates
+.env
+.env.local
+.env.*.local
+!.env.example
+!**/.env.example
+
+# Runtime logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/*.log
+.vscode/*.tmp
+.idea/
+*.swp
+*.swo
