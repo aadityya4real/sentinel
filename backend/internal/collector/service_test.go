@@ -10,6 +10,21 @@ import (
 	"github.com/aadityya4real/sentinel/backend/internal/eventstore"
 )
 
+func TestMetricsCollectedEventKeyIsStableAcrossRetries(t *testing.T) {
+	metrics := validMetrics()
+	first, err := newMetricsCollectedEvent(metrics)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := newMetricsCollectedEvent(metrics)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Key == "" || first.Key != second.Key {
+		t.Fatalf("retry keys differ: %q != %q", first.Key, second.Key)
+	}
+}
+
 type memoryRepository struct {
 	stored int
 	err    error
@@ -96,6 +111,24 @@ func TestServiceRecordRejectsInvalidMetricsBeforeStorage(t *testing.T) {
 	}
 	if repository.stored != 0 || events.stored != 0 || cache.stored != 0 || broadcaster.published != 0 {
 		t.Fatalf("invalid metrics must not be stored, got repository=%d events=%d cache=%d broadcast=%d", repository.stored, events.stored, cache.stored, broadcaster.published)
+	}
+}
+
+func TestServiceRecordDoesNotFailWhenBroadcastFails(t *testing.T) {
+	repository := &memoryRepository{}
+	events := &memoryEventAppender{}
+	cache := &memoryCache{}
+	broadcaster := &memoryBroadcaster{err: errors.New("websocket unavailable")}
+	service, err := NewService(repository, events, cache, broadcaster)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	if err := service.Record(context.Background(), validMetrics()); err != nil {
+		t.Fatalf("Record() error = %v, want successful ingestion", err)
+	}
+	if repository.stored != 1 || events.stored != 1 || cache.stored != 1 || broadcaster.published != 1 {
+		t.Fatalf("stored repository=%d events=%d cache=%d broadcast=%d, want 1 each", repository.stored, events.stored, cache.stored, broadcaster.published)
 	}
 }
 

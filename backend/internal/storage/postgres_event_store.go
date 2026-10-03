@@ -65,6 +65,15 @@ func (s *PostgreSQLEventStore) Append(ctx context.Context, event eventstore.NewE
 
 // List returns immutable events in chronological order according to the supplied filter.
 func (s *PostgreSQLEventStore) List(ctx context.Context, filter eventstore.Filter) ([]eventstore.Event, error) {
+	return s.list(ctx, filter, "ASC")
+}
+
+// ListLatest returns the newest matching events first. BeforeAt/BeforeID continue an exclusive cursor.
+func (s *PostgreSQLEventStore) ListLatest(ctx context.Context, filter eventstore.Filter) ([]eventstore.Event, error) {
+	return s.list(ctx, filter, "DESC")
+}
+
+func (s *PostgreSQLEventStore) list(ctx context.Context, filter eventstore.Filter, direction string) ([]eventstore.Event, error) {
 	if filter.Limit == 0 {
 		filter.Limit = 100
 	}
@@ -77,8 +86,14 @@ func (s *PostgreSQLEventStore) List(ctx context.Context, filter eventstore.Filte
 	if !filter.AfterAt.IsZero() && filter.AfterID < 1 {
 		return nil, fmt.Errorf("event list cursor ID must be positive")
 	}
+	if !filter.BeforeAt.IsZero() && filter.BeforeID < 1 {
+		return nil, fmt.Errorf("event list cursor ID must be positive")
+	}
+	if (!filter.AfterAt.IsZero() && !filter.BeforeAt.IsZero()) || (filter.BeforeAt.IsZero() && filter.BeforeID != 0) {
+		return nil, fmt.Errorf("event list cursor is invalid")
+	}
 
-	query, arguments := buildEventListQuery(filter)
+	query, arguments := buildEventListQuery(filter, direction)
 	rows, err := s.pool.Query(ctx, query, arguments...)
 	if err != nil {
 		return nil, fmt.Errorf("query infrastructure events: %w", err)
@@ -117,7 +132,7 @@ func (s *PostgreSQLEventStore) Latest(ctx context.Context, filter eventstore.Fil
 	return event, true, nil
 }
 
-func buildEventListQuery(filter eventstore.Filter) (string, []any) {
+func buildEventListQuery(filter eventstore.Filter, direction string) (string, []any) {
 	conditions, arguments := eventConditions(filter)
 	query := `SELECT id, event_key, event_type, subject_type, subject_id, occurred_at, recorded_at, payload
 		FROM infrastructure_events`
@@ -125,7 +140,7 @@ func buildEventListQuery(filter eventstore.Filter) (string, []any) {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 	arguments = append(arguments, filter.Limit)
-	query += fmt.Sprintf(" ORDER BY occurred_at ASC, id ASC LIMIT $%d", len(arguments))
+	query += fmt.Sprintf(" ORDER BY occurred_at %s, id %s LIMIT $%d", direction, direction, len(arguments))
 	return query, arguments
 }
 
@@ -166,6 +181,10 @@ func eventConditions(filter eventstore.Filter) ([]string, []any) {
 	if !filter.AfterAt.IsZero() {
 		arguments = append(arguments, filter.AfterAt, filter.AfterID)
 		conditions = append(conditions, fmt.Sprintf("(occurred_at, id) > ($%d, $%d)", len(arguments)-1, len(arguments)))
+	}
+	if !filter.BeforeAt.IsZero() {
+		arguments = append(arguments, filter.BeforeAt, filter.BeforeID)
+		conditions = append(conditions, fmt.Sprintf("(occurred_at, id) < ($%d, $%d)", len(arguments)-1, len(arguments)))
 	}
 
 	return conditions, arguments

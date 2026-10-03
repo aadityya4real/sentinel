@@ -49,10 +49,11 @@ export function useHosts(limit = 100) {
   });
 }
 
-export function useHistory(hostname: string, limit = 300) {
+export function useHistory(hostname: string, limit = 300, refetchInterval: number | false = false) {
   return useQuery({
     queryKey: ['dashboard', 'hosts', hostname, 'history', limit],
     queryFn: () => fetchHistory(hostname, limit),
     enabled: !!hostname,
+    refetchInterval,
   });
 }

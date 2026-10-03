@@ -88,12 +88,10 @@ func (s *Service) Record(ctx context.Context, metrics agent.Metrics) error {
 	if err := s.cache.Store(ctx, metrics); err != nil {
 		return fmt.Errorf("cache latest metric event: %w", err)
 	}
-	if err := s.broadcast.Publish(ctx, metrics); err != nil {
-		// Broadcasting is best-effort: the metric is already persisted and cached.
-		// We surface the failure via error wrapping so callers may log it, but we
-		// do not fail the Record since subscribers can catch up on the next tick.
-		return fmt.Errorf("broadcast metric event: %w", err)
-	}
+	// Broadcasting is best-effort. Durable storage and the latest-state cache
+	// already succeeded, so client notification failure must not turn an accepted
+	// metric into an HTTP error.
+	_ = s.broadcast.Publish(ctx, metrics)
 	return nil
 }
 

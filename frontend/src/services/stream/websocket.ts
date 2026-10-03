@@ -1,4 +1,4 @@
-﻿import { WS_URL } from '@/config/env';
+import { USE_MOCK_DATA, WS_URL } from '@/config/env';
 import { MockStream } from './MockStream';
 import type { MetricStreamLike, MetricSubscriber, StateSubscriber, StreamMessage, StreamState } from './types';
 
@@ -8,8 +8,8 @@ const HEARTBEAT_TIMEOUT_MS = 60_000;
 
 /**
  * MetricStream manages a WebSocket subscription to the Sentinel live metrics
- * endpoint with automatic reconnection. Falls back to MockStream when the WS
- * connection cannot be established or fails to recover after max attempts.
+ * endpoint with automatic reconnection. Mock fallback is available only when
+ * the explicit VITE_USE_MOCK_DATA setting enables it.
  */
 export class MetricStream implements MetricStreamLike {
   private socket: WebSocket | null = null;
@@ -104,9 +104,8 @@ export class MetricStream implements MetricStreamLike {
 
   private scheduleReconnect(): void {
     if (this.attempts >= RECONNECT_DELAYS_MS.length) {
-      // Always fall back to mock data after exhausting reconnect attempts —
-      // ensures the dashboard UI always has something useful to display.
-      this.switchToMock();
+      if (USE_MOCK_DATA) this.switchToMock();
+      else this.setState('disconnected', this.attempts);
       return;
     }
     const delay = RECONNECT_DELAYS_MS[this.attempts];
@@ -116,14 +115,15 @@ export class MetricStream implements MetricStreamLike {
   }
 
   private handleFailure(): void {
-    this.switchToMock();
+    if (USE_MOCK_DATA) this.switchToMock();
+    else this.scheduleReconnect();
   }
 
   private switchToMock(): void {
     if (this.mockFallback) return;
     this.mockFallback = new MockStream();
     this.mockFallback.subscribe((m) => this.metricHandlers.forEach((h) => h(m)));
-    this.mockFallback.onStateChange((s, a) => this.setState(s, a));
+    this.mockFallback.onStateChange((s, a) => this.setState(s === 'connected' ? 'mock' : s, a));
     this.mockFallback.connect();
   }
 

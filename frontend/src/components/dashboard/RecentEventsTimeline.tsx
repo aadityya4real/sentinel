@@ -11,14 +11,7 @@ interface TimelineEntryProps {
 interface RecentEventsTimelineProps {
   events: Event[];
   isLoading?: boolean;
-}
-
-function classifyEvent(type: string) {
-  if (type.includes('critical')) return { variant: 'critical' as const, color: '#f43f5e', label: 'Critical' };
-  if (type.includes('warning') || type.includes('spike') || type.includes('error')) return { variant: 'active' as const, color: '#f59e0b', label: 'Warning' };
-  if (type.includes('restarted') || type.includes('started') || type.includes('deployed')) return { variant: 'info' as const, color: '#10b981', label: 'Info' };
-  if (type.includes('recovered') || type.includes('health')) return { variant: 'info' as const, color: '#3b82f6', label: 'Recovered' };
-  return { variant: 'info' as const, color: '#7c3aed', label: 'Info' };
+  isUnavailable?: boolean;
 }
 
 function formatEventType(type: string) {
@@ -27,7 +20,7 @@ function formatEventType(type: string) {
 }
 
 export function TimelineEntry({ event, index }: TimelineEntryProps) {
-  const { variant, color, label } = classifyEvent(event.type);
+  const color = '#7c3aed';
   const description = formatEventType(event.type);
 
   return (
@@ -42,7 +35,7 @@ export function TimelineEntry({ event, index }: TimelineEntryProps) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant={variant}>{label}</Badge>
+          <Badge variant="info">{event.type}</Badge>
           <span className="text-xs font-mono text-text-muted">{event.subject_id}</span>
         </div>
         <p className="mt-0.5 text-sm text-text-primary">{description}</p>
@@ -57,9 +50,18 @@ export function TimelineEntry({ event, index }: TimelineEntryProps) {
   );
 }
 
-export function RecentEventsTimeline({ events, isLoading }: RecentEventsTimelineProps) {
+export function RecentEventsTimeline({ events, isLoading, isUnavailable = false }: RecentEventsTimelineProps) {
   if (isLoading) {
     return <RecentEventsSkeleton />;
+  }
+
+  if (!events.length && isUnavailable) {
+    return (
+      <div className="card p-5">
+        <h3 className="mb-3 text-sm font-medium text-text-primary">Recent Events</h3>
+        <p className="text-sm text-rose-400">Events unavailable</p>
+      </div>
+    );
   }
 
   if (!events.length) {

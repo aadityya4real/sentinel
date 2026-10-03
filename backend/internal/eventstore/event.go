@@ -42,6 +42,8 @@ type Filter struct {
 	To          time.Time
 	AfterAt     time.Time
 	AfterID     int64
+	BeforeAt    time.Time
+	BeforeID    int64
 	Limit       int
 }
 
@@ -50,6 +52,11 @@ type Store interface {
 	Append(ctx context.Context, event NewEvent) (Event, error)
 	List(ctx context.Context, filter Filter) ([]Event, error)
 	Latest(ctx context.Context, filter Filter) (Event, bool, error)
+}
+
+// LatestReader returns matching events newest first, with an exclusive before cursor.
+type LatestReader interface {
+	ListLatest(ctx context.Context, filter Filter) ([]Event, error)
 }
 
 // Validate verifies that an event has a safe, complete representation for durable storage.

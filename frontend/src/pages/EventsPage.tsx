@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
@@ -17,17 +17,21 @@ function matchesFilter(event: Event, filter: Filter): boolean {
   return event.type.toLowerCase().includes(filter);
 }
 
-function severityVariant(type: string): 'info' | 'active' | 'critical' {
-  if (type.includes('critical')) return 'critical';
-  if (type.includes('warning') || type.includes('spike')) return 'active';
-  return 'info';
-}
-
 export default function EventsPage() {
   const [filter, setFilter] = useState<Filter>('all');
-  const { data, isLoading, isError, error, refetch } = useEvents(50);
+  const [cursor, setCursor] = useState<string>();
+  const [allEvents, setAllEvents] = useState<Event[]>([]);
+  const { data, isLoading, isError, error, refetch, isFetching } = useEvents(50, cursor);
 
-  const backendEvents: Event[] = data?.events ?? [];
+  useEffect(() => {
+    if (!data) return;
+    setAllEvents((current) => {
+      const merged = cursor ? [...current, ...data.events] : data.events;
+      return [...new Map(merged.map((event) => [event.id, event])).values()];
+    });
+  }, [data, cursor]);
+
+  const backendEvents: Event[] = allEvents;
   const events = useMemo(
     () => backendEvents.filter((e) => matchesFilter(e, filter)),
     [backendEvents, filter],
@@ -46,7 +50,7 @@ export default function EventsPage() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-slate-100">Events</h1>
-        <p className="text-sm text-slate-500">Chronological infrastructure event stream</p>
+        <p className="text-sm text-slate-500">Newest infrastructure events first</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -63,7 +67,7 @@ export default function EventsPage() {
         ))}
       </div>
 
-      {isError && (
+      {isError && data && (
         <ErrorState message={error?.message ?? 'Failed to load events'} onRetry={refetch} />
       )}
 
@@ -79,6 +83,8 @@ export default function EventsPage() {
             </div>
           ))}
         </Card>
+      ) : isError && !data ? (
+        <ErrorState message={error?.message ?? 'Failed to load events'} onRetry={refetch} />
       ) : events.length === 0 ? (
         <EmptyState title="No events" description={
           backendEvents.length === 0 
@@ -99,7 +105,7 @@ export default function EventsPage() {
                 <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant={severityVariant(event.type)}>
+                    <Badge variant="info">
                       {event.type.split('.').pop()}
                     </Badge>
                     <span className="font-mono text-sm text-slate-300">{event.subject_id}</span>
@@ -120,6 +126,15 @@ export default function EventsPage() {
             ))}
           </div>
         </Card>
+      )}
+      {data?.next_cursor && (
+        <button
+          onClick={() => setCursor(data.next_cursor)}
+          disabled={isFetching}
+          className="rounded-lg border border-line bg-surface px-4 py-2 text-sm text-slate-300 hover:text-white disabled:opacity-50"
+        >
+          {isFetching ? 'Loading…' : 'Load more events'}
+        </button>
       )}
     </motion.div>
   );

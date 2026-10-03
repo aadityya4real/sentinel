@@ -9,6 +9,7 @@ interface StreamStatusBadgeProps {
 
 const COPY: Record<StreamState, { label: string; dot: string; text: string; ring: string }> = {
   connected: { label: 'Live', dot: 'bg-emerald-400', text: 'text-emerald-400', ring: 'ring-emerald-500/30' },
+  mock: { label: 'Mock', dot: 'bg-violet-400', text: 'text-violet-400', ring: 'ring-violet-500/30' },
   connecting: { label: 'Connecting', dot: 'bg-slate-400', text: 'text-slate-400', ring: 'ring-slate-500/30' },
   reconnecting: { label: 'Reconnecting', dot: 'bg-amber-400', text: 'text-amber-400', ring: 'ring-amber-500/30' },
   disconnected: { label: 'Disconnected', dot: 'bg-rose-400', text: 'text-rose-400', ring: 'ring-rose-500/30' },
@@ -20,7 +21,9 @@ export function StreamStatusBadge({ state, attempts = 0 }: StreamStatusBadgeProp
   const tooltip =
     state === 'reconnecting'
       ? `Reconnect attempt ${attempts}`
-      : state === 'disconnected'
+      : state === 'mock'
+        ? 'Explicit mock mode is enabled'
+        : state === 'disconnected'
         ? 'Stream offline — showing last known data'
         : 'Streaming live metrics';
 

@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/spf13/viper"
+	"os"
 )
 
 type Config struct {
@@ -9,10 +9,12 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	viper.SetDefault("PORT", "8080")
-	viper.AutomaticEnv()
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	return &Config{
-		Port: viper.GetString("PORT"),
+		Port: port,
 	}, nil
 }

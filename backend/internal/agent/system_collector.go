@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -44,7 +45,6 @@ func (c *SystemCollector) Collect(ctx context.Context) (Metrics, error) {
 	if err != nil {
 		return Metrics{}, fmt.Errorf("collect host information: %w", err)
 	}
-
 	disks, err := collectDiskUsage(ctx)
 	if err != nil {
 		return Metrics{}, err
@@ -73,12 +73,26 @@ func collectDiskUsage(ctx context.Context) ([]DiskUsage, error) {
 	}
 
 	usage := make([]DiskUsage, 0, len(partitions))
+	seenPaths := make(map[string]struct{}, len(partitions))
 	for _, partition := range partitions {
-		stats, err := disk.UsageWithContext(ctx, partition.Mountpoint)
-		if err != nil {
-			return nil, fmt.Errorf("collect disk usage for %q: %w", partition.Mountpoint, err)
+		// Ignore partitions the operating system reports but does not expose as
+		// readable filesystems; the API only needs the usable mounted disks.
+		if partition.Mountpoint == "" {
+			continue
+		}
+		if _, exists := seenPaths[partition.Mountpoint]; exists {
+			continue
 		}
 
+		stats, err := disk.UsageWithContext(ctx, partition.Mountpoint)
+		if err != nil {
+			continue
+		}
+		if stats.Total == 0 || stats.Used > stats.Total || math.IsNaN(stats.UsedPercent) || math.IsInf(stats.UsedPercent, 0) || stats.UsedPercent < 0 || stats.UsedPercent > 100 {
+			continue
+		}
+
+		seenPaths[partition.Mountpoint] = struct{}{}
 		usage = append(usage, DiskUsage{
 			Path:        partition.Mountpoint,
 			Filesystem:  partition.Fstype,
@@ -86,6 +100,9 @@ func collectDiskUsage(ctx context.Context) ([]DiskUsage, error) {
 			UsedBytes:   stats.Used,
 			UsedPercent: stats.UsedPercent,
 		})
+	}
+	if len(usage) == 0 {
+		return nil, fmt.Errorf("collect disk usage: no readable mounted filesystems")
 	}
 
 	return usage, nil

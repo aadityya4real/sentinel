@@ -17,6 +17,7 @@ import (
 type Store interface {
 	Append(ctx context.Context, event eventstore.NewEvent) (eventstore.Event, error)
 	List(ctx context.Context, filter eventstore.Filter) ([]eventstore.Event, error)
+	eventstore.LatestReader
 }
 
 // LatestStateStore stores the most recent event submitted by each host.
@@ -66,6 +67,11 @@ func (c *Collector) Collect(ctx context.Context, event models.Event) (eventstore
 // List returns a page of infrastructure events matching the given filter.
 func (c *Collector) List(ctx context.Context, filter eventstore.Filter) ([]eventstore.Event, error) {
 	return c.store.List(ctx, filter)
+}
+
+// ListLatest returns matching events newest first.
+func (c *Collector) ListLatest(ctx context.Context, filter eventstore.Filter) ([]eventstore.Event, error) {
+	return c.store.ListLatest(ctx, filter)
 }
 
 // ValidationError identifies an event payload rejected before storage.

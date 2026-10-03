@@ -1,6 +1,6 @@
 import type { Metrics } from '@/types/api';
 
-export type StreamState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+export type StreamState = 'connecting' | 'connected' | 'mock' | 'reconnecting' | 'disconnected';
 
 export interface StreamMessage {
   type: 'metrics';

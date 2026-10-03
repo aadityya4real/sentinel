@@ -7,6 +7,7 @@ interface InfChartProps {
   color: string;
   unit: string;
   isLoading?: boolean;
+  emptyMessage?: string;
 }
 
 interface ChartTooltipProps {
@@ -33,7 +34,7 @@ function yDomain(data: { value: number }[]) {
   return [0, Math.min(100, Math.ceil(maxVal / 10) * 10 + 10)] as [number, number];
 }
 
-export function InfChart({ title, data, color, unit, isLoading }: InfChartProps) {
+export function InfChart({ title, data, color, unit, isLoading, emptyMessage = 'No data yet' }: InfChartProps) {
   const gradientId = `chart-${title.replace(/\s+/g, '_')}`;
   const domain = yDomain(data);
 
@@ -48,7 +49,7 @@ export function InfChart({ title, data, color, unit, isLoading }: InfChartProps)
         <div className="text-center">
           <div className="mx-auto mb-2 h-8 w-8 rounded-full bg-elevated animate-shimmer" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.06), transparent)', backgroundSize: '200% 100%' }} />
           <p className="text-xs text-text-muted">
-            {isLoading ? 'Loading...' : 'No data yet'}
+            {isLoading ? 'Loading...' : emptyMessage}
           </p>
         </div>
       </motion.div>

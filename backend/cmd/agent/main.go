@@ -1,12 +1,19 @@
-// Command agent periodically emits Sentinel host metrics as JSON to standard output.
+// Command agent periodically collects host metrics and posts them to the Sentinel API.
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +23,8 @@ import (
 const (
 	collectionInterval = 5 * time.Second
 	cpuSampleInterval  = 250 * time.Millisecond
+	requestTimeout     = 5 * time.Second
+	maxSendAttempts    = 3
 )
 
 func main() {
@@ -27,11 +36,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "create collector: %v\n", err)
 		os.Exit(1)
 	}
-
-	encoder := json.NewEncoder(os.Stdout)
-	if err := collectAndWrite(ctx, collector, encoder); err != nil {
-		fmt.Fprintf(os.Stderr, "collect metrics: %v\n", err)
+	endpoint, err := metricsEndpoint(os.Getenv("SENTINEL_API_URL"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "configure API endpoint: %v\n", err)
 		os.Exit(1)
+	}
+	client := &http.Client{Timeout: requestTimeout}
+
+	if err := collectAndSend(ctx, collector, client, endpoint); err != nil {
+		log.Printf("send metrics: %v", err)
 	}
 
 	ticker := time.NewTicker(collectionInterval)
@@ -42,21 +55,88 @@ func main() {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := collectAndWrite(ctx, collector, encoder); err != nil {
-				fmt.Fprintf(os.Stderr, "collect metrics: %v\n", err)
+			if err := collectAndSend(ctx, collector, client, endpoint); err != nil {
+				log.Printf("send metrics: %v", err)
 			}
 		}
 	}
 }
 
-func collectAndWrite(ctx context.Context, collector agent.Collector, encoder *json.Encoder) error {
+func metricsEndpoint(apiURL string) (string, error) {
+	if strings.TrimSpace(apiURL) == "" {
+		apiURL = "http://localhost:8080"
+	}
+	base, err := url.Parse(strings.TrimSpace(apiURL))
+	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" || base.RawQuery != "" || base.Fragment != "" {
+		return "", fmt.Errorf("SENTINEL_API_URL must be an absolute HTTP(S) base URL without query or fragment")
+	}
+	base.Path = strings.TrimRight(base.Path, "/") + "/api/v1/metrics"
+	return base.String(), nil
+}
+
+func collectAndSend(ctx context.Context, collector agent.Collector, client *http.Client, endpoint string) error {
 	metrics, err := collector.Collect(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("collect metrics: %w", err)
 	}
-	if err := encoder.Encode(metrics); err != nil {
+
+	var lastErr error
+	for attempt := 1; attempt <= maxSendAttempts; attempt++ {
+		if attempt > 1 {
+			delay := time.Duration(attempt-1) * 500 * time.Millisecond
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
+		}
+		lastErr = postMetrics(ctx, client, endpoint, metrics)
+		if lastErr == nil {
+			return nil
+		}
+		var responseErr *apiResponseError
+		if errors.As(lastErr, &responseErr) && !responseErr.retryable() {
+			return lastErr
+		}
+	}
+	return fmt.Errorf("failed after %d attempts: %w", maxSendAttempts, lastErr)
+}
+
+type apiResponseError struct {
+	statusCode int
+	message    string
+}
+
+func (e *apiResponseError) Error() string {
+	return fmt.Sprintf("API returned %d: %s", e.statusCode, e.message)
+}
+
+func (e *apiResponseError) retryable() bool {
+	return e.statusCode == http.StatusTooManyRequests || e.statusCode >= http.StatusInternalServerError
+}
+
+func postMetrics(ctx context.Context, client *http.Client, endpoint string, metrics agent.Metrics) error {
+	payload, err := json.Marshal(metrics)
+	if err != nil {
 		return fmt.Errorf("encode metrics: %w", err)
 	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("create metrics request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("post metrics: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		message, _ := io.ReadAll(io.LimitReader(response.Body, 4*1024))
+		return &apiResponseError{statusCode: response.StatusCode, message: strings.TrimSpace(string(message))}
+	}
+	_, _ = io.Copy(io.Discard, response.Body)
 
 	return nil
 }

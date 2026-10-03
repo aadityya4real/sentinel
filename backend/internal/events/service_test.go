@@ -23,6 +23,9 @@ func (s *storeStub) Append(_ context.Context, event eventstore.NewEvent) (events
 func (s *storeStub) List(_ context.Context, _ eventstore.Filter) ([]eventstore.Event, error) {
 	return []eventstore.Event{}, nil
 }
+func (s *storeStub) ListLatest(_ context.Context, _ eventstore.Filter) ([]eventstore.Event, error) {
+	return []eventstore.Event{}, nil
+}
 
 type cacheStub struct {
 	event models.Event
