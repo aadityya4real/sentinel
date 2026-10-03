@@ -88,7 +88,13 @@ backend/
         └── websocket/   Broadcast hub for live metric streaming
 ```
 
-Configuration uses Viper — env vars, `.env` file, then defaults. See `.env.example`.
+The Go server reads environment variables through Viper and does not automatically load `.env`. Docker Compose reads the root `.env` file for Compose substitutions; provide values to the server and agent process through the shell, service manager, or container environment. See `.env.example` for local development values.
+
+## Security configuration
+
+Set `SENTINEL_API_TOKEN` to the same random value of at least 32 characters for the server and agent. The agent sends it as a Bearer token for metric submissions. Metric/event ingestion and AI analysis require this token; read-only health, dashboard, event-list, replay, and Time Machine endpoints remain public for the browser dashboard. The frontend must not contain the server token, so browser-based AI analysis requires a future session-authenticated server-side path.
+
+Set `SENTINEL_ALLOWED_ORIGINS` to a comma-separated list of exact browser origins. Development defaults are limited to local frontend origins; production requires an explicit list. PostgreSQL and Redis Compose ports bind to loopback for local development. Compose's default PostgreSQL credential and unauthenticated local Redis are development-only; configure credentials and keep both services private in production. When AI is enabled, remote provider URLs must use HTTPS; HTTP is accepted only for loopback endpoints in non-production environments.
 
 ## Frontend stack
 
@@ -118,7 +124,7 @@ cd frontend && npm run dev
 # Terminal 2: cd frontend && npm run dev
 ```
 
-Docker Compose manages PostgreSQL 17 and Redis 8 with health checks and persistent volumes. The default credentials in `.env.example` match the compose setup out of the box.
+Docker Compose manages PostgreSQL 17 and Redis 8 with health checks and persistent volumes. Its defaults are for local development only and its database ports are bound to loopback.
 
 ## License
 

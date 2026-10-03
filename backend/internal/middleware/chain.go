@@ -12,13 +12,13 @@ const requestTimeout = 15 * time.Second
 
 // Chain returns the ordered Sentinel middleware stack applied to every request:
 // RequestID, RealIP, Recovery, Logging, CORS (with WebSocket support), and request Timeout.
-func Chain(logger *zap.Logger) []func(http.Handler) http.Handler {
+func Chain(logger *zap.Logger, allowedOrigins []string) []func(http.Handler) http.Handler {
 	return []func(http.Handler) http.Handler{
 		middleware.RequestID,
 		middleware.RealIP,
 		Recovery(logger),
 		Logging(logger),
-		CORS(nil),
+		CORS(allowedOrigins),
 		middleware.Timeout(requestTimeout),
 	}
 }

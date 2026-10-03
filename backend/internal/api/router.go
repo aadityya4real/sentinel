@@ -21,10 +21,16 @@ type Handlers struct {
 	Websocket   *WebsocketHandler
 }
 
+// RouterSecurity controls access to protected operations and browser origins.
+type RouterSecurity struct {
+	APIToken       string
+	AllowedOrigins []string
+}
+
 // NewRouter creates the Sentinel HTTP router with standardized /api/v1 routes.
-func NewRouter(handlers Handlers, logger *zap.Logger) http.Handler {
+func NewRouter(handlers Handlers, logger *zap.Logger, security RouterSecurity) http.Handler {
 	r := chi.NewRouter()
-	for _, mw := range middleware.Chain(logger) {
+	for _, mw := range middleware.Chain(logger, security.AllowedOrigins) {
 		r.Use(mw)
 	}
 
@@ -33,8 +39,12 @@ func NewRouter(handlers Handlers, logger *zap.Logger) http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/health", handlers.Health.ServeHTTP)
 
-		r.Post("/metrics", handlers.Metrics.ServeHTTP)
-		r.Post("/events", handlers.Events.ServeHTTP)
+		r.Group(func(protected chi.Router) {
+			protected.Use(middleware.RequireBearerToken(security.APIToken))
+			protected.Post("/metrics", handlers.Metrics.ServeHTTP)
+			protected.Post("/events", handlers.Events.ServeHTTP)
+			protected.Post("/ai/incidents/analyze", handlers.AI.AnalyzeIncident)
+		})
 		r.Get("/events", handlers.Events.List)
 
 		r.Route("/dashboard", func(r chi.Router) {
@@ -51,9 +61,6 @@ func NewRouter(handlers Handlers, logger *zap.Logger) http.Handler {
 			r.Get("/hosts/{hostname}", handlers.TimeMachine.Snapshot)
 		})
 
-		r.Route("/ai", func(r chi.Router) {
-			r.Post("/incidents/analyze", handlers.AI.AnalyzeIncident)
-		})
 	})
 
 	r.Get("/ws/v1/metrics", handlers.Websocket.Metrics)

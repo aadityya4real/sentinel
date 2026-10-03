@@ -12,8 +12,8 @@ import (
 	"github.com/aadityya4real/sentinel/backend/internal/dashboard"
 	"github.com/aadityya4real/sentinel/backend/internal/database"
 	eventing "github.com/aadityya4real/sentinel/backend/internal/events"
-	"github.com/aadityya4real/sentinel/backend/internal/replay"
 	"github.com/aadityya4real/sentinel/backend/internal/redis"
+	"github.com/aadityya4real/sentinel/backend/internal/replay"
 	"github.com/aadityya4real/sentinel/backend/internal/storage"
 	"github.com/aadityya4real/sentinel/backend/internal/timemachine"
 	"github.com/aadityya4real/sentinel/backend/internal/websocket"
@@ -115,7 +115,7 @@ func buildDependencies(cfg *config.Config, db *database.Database, redisClient *r
 	if err != nil {
 		return nil, fmt.Errorf("create AI handler: %w", err)
 	}
-	websocketHandler, err := api.NewWebsocketHandler(hub, log)
+	websocketHandler, err := api.NewWebsocketHandler(hub, log, cfg.AllowedOrigins)
 	if err != nil {
 		return nil, fmt.Errorf("create websocket handler: %w", err)
 	}
@@ -138,7 +138,7 @@ func buildAnalyzer(cfg *config.Config, events *storage.PostgreSQLEventStore) (ai
 	if !cfg.AIEnabled {
 		return ai.DisabledAnalyzer{}, nil
 	}
-	client, err := ai.NewOpenAICompatibleClient(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel)
+	client, err := ai.NewOpenAICompatibleClient(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel, cfg.Environment != "production")
 	if err != nil {
 		return nil, err
 	}

@@ -32,6 +32,12 @@ func TestMetricsEndpoint(t *testing.T) {
 	if _, err := metricsEndpoint("localhost:8080"); err == nil {
 		t.Fatal("metricsEndpoint() accepted a URL without an HTTP scheme")
 	}
+	if _, err := metricsEndpoint("http://sentinel.example"); err == nil {
+		t.Fatal("metricsEndpoint() accepted remote HTTP, which would expose the bearer token")
+	}
+	if endpoint, err := metricsEndpoint("http://127.0.0.1:8080"); err != nil || endpoint != "http://127.0.0.1:8080/api/v1/metrics" {
+		t.Fatalf("metricsEndpoint() local HTTP = %q, %v", endpoint, err)
+	}
 }
 
 func TestPostMetricsSendsValidatedJSON(t *testing.T) {
@@ -42,6 +48,9 @@ func TestPostMetricsSendsValidatedJSON(t *testing.T) {
 		}
 		if got := r.Header.Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
 			t.Errorf("Content-Type = %q", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-agent-token-32-characters-long" {
+			t.Errorf("Authorization header = %q, want configured bearer token", got)
 		}
 		var received agent.Metrics
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
@@ -54,7 +63,7 @@ func TestPostMetricsSendsValidatedJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if err := postMetrics(context.Background(), server.Client(), server.URL+"/api/v1/metrics", metrics); err != nil {
+	if err := postMetrics(context.Background(), server.Client(), server.URL+"/api/v1/metrics", "test-agent-token-32-characters-long", metrics); err != nil {
 		t.Fatalf("postMetrics() error = %v", err)
 	}
 }
@@ -71,7 +80,7 @@ func TestCollectAndSendRetriesServerErrors(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if err := collectAndSend(context.Background(), fixedCollector{metrics: validAgentMetrics()}, server.Client(), server.URL); err != nil {
+	if err := collectAndSend(context.Background(), fixedCollector{metrics: validAgentMetrics()}, server.Client(), server.URL, "test-agent-token-32-characters-long"); err != nil {
 		t.Fatalf("collectAndSend() error = %v", err)
 	}
 	if attempts != 2 {
@@ -87,7 +96,7 @@ func TestCollectAndSendDoesNotRetryClientErrors(t *testing.T) {
 	}))
 	defer server.Close()
 
-	err := collectAndSend(context.Background(), fixedCollector{metrics: validAgentMetrics()}, server.Client(), server.URL)
+	err := collectAndSend(context.Background(), fixedCollector{metrics: validAgentMetrics()}, server.Client(), server.URL, "test-agent-token-32-characters-long")
 	if err == nil {
 		t.Fatal("collectAndSend() error = nil, want API error")
 	}

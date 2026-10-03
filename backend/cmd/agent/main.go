@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -41,9 +42,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "configure API endpoint: %v\n", err)
 		os.Exit(1)
 	}
+	token := os.Getenv("SENTINEL_API_TOKEN")
+	if strings.TrimSpace(token) == "" {
+		fmt.Fprintln(os.Stderr, "configure API authentication: SENTINEL_API_TOKEN is required")
+		os.Exit(1)
+	}
 	client := &http.Client{Timeout: requestTimeout}
 
-	if err := collectAndSend(ctx, collector, client, endpoint); err != nil {
+	if err := collectAndSend(ctx, collector, client, endpoint, token); err != nil {
 		log.Printf("send metrics: %v", err)
 	}
 
@@ -55,7 +61,7 @@ func main() {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := collectAndSend(ctx, collector, client, endpoint); err != nil {
+			if err := collectAndSend(ctx, collector, client, endpoint, token); err != nil {
 				log.Printf("send metrics: %v", err)
 			}
 		}
@@ -67,14 +73,25 @@ func metricsEndpoint(apiURL string) (string, error) {
 		apiURL = "http://localhost:8080"
 	}
 	base, err := url.Parse(strings.TrimSpace(apiURL))
-	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" || base.RawQuery != "" || base.Fragment != "" {
+	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" || base.RawQuery != "" || base.Fragment != "" || base.User != nil {
 		return "", fmt.Errorf("SENTINEL_API_URL must be an absolute HTTP(S) base URL without query or fragment")
+	}
+	if base.Scheme != "https" && !isLoopbackHost(base.Hostname()) {
+		return "", fmt.Errorf("SENTINEL_API_URL must use HTTPS; HTTP is allowed only for local development endpoints")
 	}
 	base.Path = strings.TrimRight(base.Path, "/") + "/api/v1/metrics"
 	return base.String(), nil
 }
 
-func collectAndSend(ctx context.Context, collector agent.Collector, client *http.Client, endpoint string) error {
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func collectAndSend(ctx context.Context, collector agent.Collector, client *http.Client, endpoint, token string) error {
 	metrics, err := collector.Collect(ctx)
 	if err != nil {
 		return fmt.Errorf("collect metrics: %w", err)
@@ -92,7 +109,7 @@ func collectAndSend(ctx context.Context, collector agent.Collector, client *http
 			case <-timer.C:
 			}
 		}
-		lastErr = postMetrics(ctx, client, endpoint, metrics)
+		lastErr = postMetrics(ctx, client, endpoint, token, metrics)
 		if lastErr == nil {
 			return nil
 		}
@@ -117,7 +134,7 @@ func (e *apiResponseError) retryable() bool {
 	return e.statusCode == http.StatusTooManyRequests || e.statusCode >= http.StatusInternalServerError
 }
 
-func postMetrics(ctx context.Context, client *http.Client, endpoint string, metrics agent.Metrics) error {
+func postMetrics(ctx context.Context, client *http.Client, endpoint, token string, metrics agent.Metrics) error {
 	payload, err := json.Marshal(metrics)
 	if err != nil {
 		return fmt.Errorf("encode metrics: %w", err)
@@ -127,6 +144,7 @@ func postMetrics(ctx context.Context, client *http.Client, endpoint string, metr
 		return fmt.Errorf("create metrics request: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+token)
 	response, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("post metrics: %w", err)

@@ -20,11 +20,11 @@ const startupTimeout = 15 * time.Second
 
 // App owns the long-lived dependencies and HTTP server for the Sentinel process.
 type App struct {
-	cfg    *config.Config
-	log    *zap.Logger
-	db     *database.Database
-	redis  *redis.Redis
-	deps   *Dependencies
+	cfg   *config.Config
+	log   *zap.Logger
+	db    *database.Database
+	redis *redis.Redis
+	deps  *Dependencies
 }
 
 // New validates configuration and builds the application and all of its dependencies.
@@ -75,7 +75,7 @@ func New(cfg *config.Config) (*App, error) {
 // Run starts the HTTP server and blocks until a shutdown signal is received.
 func (a *App) Run() error {
 	addr := ":" + a.cfg.Port
-	httpServer := buildHTTPServer(a.deps, a.log, addr)
+	httpServer := buildHTTPServer(a.deps, a.cfg, a.log, addr)
 
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

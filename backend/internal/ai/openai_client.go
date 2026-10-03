@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -21,7 +22,7 @@ type OpenAICompatibleClient struct {
 }
 
 // NewOpenAICompatibleClient creates a completion client for an OpenAI-compatible base URL.
-func NewOpenAICompatibleClient(baseURL, apiKey, model string) (*OpenAICompatibleClient, error) {
+func NewOpenAICompatibleClient(baseURL, apiKey, model string, allowLocalHTTP bool) (*OpenAICompatibleClient, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, fmt.Errorf("AI API key is required")
 	}
@@ -29,8 +30,11 @@ func NewOpenAICompatibleClient(baseURL, apiKey, model string) (*OpenAICompatible
 		return nil, fmt.Errorf("AI model is required")
 	}
 	base, err := url.Parse(baseURL)
-	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
-		return nil, fmt.Errorf("AI base URL must be an absolute HTTP URL")
+	if err != nil || base.Host == "" || (base.Scheme != "http" && base.Scheme != "https") || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
+		return nil, fmt.Errorf("AI base URL must be an absolute HTTP(S) URL without credentials, query, or fragment")
+	}
+	if base.Scheme != "https" && !(allowLocalHTTP && isLoopbackHost(base.Hostname())) {
+		return nil, fmt.Errorf("AI base URL must use HTTPS; HTTP is allowed only for local development endpoints")
 	}
 	base.Path = strings.TrimSuffix(base.Path, "/") + "/chat/completions"
 	base.RawQuery = ""
@@ -61,8 +65,8 @@ func (c *OpenAICompatibleClient) Complete(ctx context.Context, systemPrompt, use
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		message, _ := io.ReadAll(io.LimitReader(response.Body, 8*1024))
-		return "", fmt.Errorf("AI provider returned %s: %s", response.Status, strings.TrimSpace(string(message)))
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 8*1024))
+		return "", fmt.Errorf("AI provider returned %s", response.Status)
 	}
 
 	var completion chatResponse
@@ -73,6 +77,14 @@ func (c *OpenAICompatibleClient) Complete(ctx context.Context, systemPrompt, use
 		return "", fmt.Errorf("AI response contained no completion content")
 	}
 	return completion.Choices[0].Message.Content, nil
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 type chatRequest struct {

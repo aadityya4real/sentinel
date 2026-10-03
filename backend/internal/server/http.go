@@ -5,14 +5,15 @@ import (
 	"time"
 
 	"github.com/aadityya4real/sentinel/backend/internal/api"
+	"github.com/aadityya4real/sentinel/backend/internal/config"
 	"go.uber.org/zap"
 )
 
 // buildHTTPServer constructs the HTTP server with the assembled router and timeouts.
-func buildHTTPServer(deps *Dependencies, logger *zap.Logger, addr string) *http.Server {
+func buildHTTPServer(deps *Dependencies, cfg *config.Config, logger *zap.Logger, addr string) *http.Server {
 	return &http.Server{
 		Addr:              addr,
-		Handler:           api.NewRouter(api.Handlers{Health: deps.Health, Metrics: deps.Metrics, Events: deps.Events, Dashboard: deps.Dashboard, Replay: deps.Replay, TimeMachine: deps.TimeMachine, AI: deps.AI, Websocket: deps.Websocket}, logger),
+		Handler:           api.NewRouter(api.Handlers{Health: deps.Health, Metrics: deps.Metrics, Events: deps.Events, Dashboard: deps.Dashboard, Replay: deps.Replay, TimeMachine: deps.TimeMachine, AI: deps.AI, Websocket: deps.Websocket}, logger, api.RouterSecurity{APIToken: cfg.APIToken, AllowedOrigins: cfg.AllowedOrigins}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
