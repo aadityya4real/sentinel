@@ -1,9 +1,13 @@
 package middleware
 
 import (
+	"bufio"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"go.uber.org/zap"
 )
 
 func TestRequireBearerToken(t *testing.T) {
@@ -53,5 +57,58 @@ func TestCORSAllowsConfiguredOriginAndRejectsUnknownOrigin(t *testing.T) {
 		if got := response.Header().Get("Access-Control-Allow-Origin"); got != test.allowHeader {
 			t.Fatalf("allow origin=%q, want %q", got, test.allowHeader)
 		}
+	}
+}
+
+type hijackableRecorder struct{ *httptest.ResponseRecorder }
+
+func (hijackableRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) { return nil, nil, nil }
+
+func TestRequestTimeoutPreservesWebSocketHijacker(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/ws/v1/metrics", nil)
+	request.Header.Set("Connection", "keep-alive, Upgrade")
+	request.Header.Set("Upgrade", "websocket")
+	writer := hijackableRecorder{httptest.NewRecorder()}
+	called := false
+	handler := RequestTimeout(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		called = true
+		if _, ok := response.(http.Hijacker); !ok {
+			t.Error("WebSocket upgrade writer no longer implements http.Hijacker")
+		}
+	}))
+	handler.ServeHTTP(writer, request)
+	if !called {
+		t.Fatal("WebSocket upgrade did not reach the handler")
+	}
+}
+
+func TestRequestTimeoutAddsDeadlineToRegularHTTP(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	called := false
+	handler := RequestTimeout(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		called = true
+		if _, ok := request.Context().Deadline(); !ok {
+			t.Error("regular HTTP request has no timeout deadline")
+		}
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+	if !called {
+		t.Fatal("regular HTTP request did not reach the handler")
+	}
+}
+
+func TestLoggingPreservesWebSocketHijacker(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/ws/v1/metrics", nil)
+	writer := hijackableRecorder{httptest.NewRecorder()}
+	called := false
+	handler := Logging(zap.NewNop())(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		called = true
+		if _, ok := response.(http.Hijacker); !ok {
+			t.Error("logging middleware removed http.Hijacker")
+		}
+	}))
+	handler.ServeHTTP(writer, request)
+	if !called {
+		t.Fatal("WebSocket request did not reach handler")
 	}
 }

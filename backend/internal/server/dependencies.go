@@ -35,9 +35,9 @@ type Dependencies struct {
 
 // buildDependencies wires the full dependency graph and returns assembled HTTP handlers.
 func buildDependencies(cfg *config.Config, db *database.Database, redisClient *redis.Redis, log *zap.Logger) (*Dependencies, error) {
-	repository, err := storage.NewPostgreSQLMetricsRepository(db.Pool)
+	ingestionStore, err := storage.NewPostgreSQLIngestionStore(db.Pool)
 	if err != nil {
-		return nil, fmt.Errorf("create metrics repository: %w", err)
+		return nil, fmt.Errorf("create PostgreSQL ingestion store: %w", err)
 	}
 	cache, err := storage.NewRedisLatestMetricsCache(redisClient.Client)
 	if err != nil {
@@ -73,7 +73,7 @@ func buildDependencies(cfg *config.Config, db *database.Database, redisClient *r
 	hub := websocket.NewHub(log)
 	go hub.Run(context.Background())
 
-	service, err := collector.NewService(repository, events, cache, hub)
+	service, err := collector.NewService(ingestionStore, cache, hub)
 	if err != nil {
 		return nil, fmt.Errorf("create collector service: %w", err)
 	}

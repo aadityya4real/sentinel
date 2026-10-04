@@ -58,9 +58,9 @@ func (c *Collector) Collect(ctx context.Context, event models.Event) (eventstore
 	if err != nil {
 		return eventstore.Event{}, fmt.Errorf("append event: %w", err)
 	}
-	if err := c.cache.Store(ctx, event); err != nil {
-		return eventstore.Event{}, fmt.Errorf("cache latest state: %w", err)
-	}
+	// PostgreSQL is the source of truth; a cache projection failure must not
+	// make a durable event look lost to the agent.
+	_ = c.cache.Store(ctx, event)
 	return stored, nil
 }
 

@@ -2,13 +2,13 @@
 
 Infrastructure monitoring with AI event analysis, event replay, and a real-time dashboard.
 
-Three processes ingest host metrics, store events, and run AI analysis — all visible through a React frontend.
+The API accepts authenticated telemetry from the agent, persists metrics and immutable events, and serves a React dashboard with replay, Time Machine, and on-demand AI analysis.
 
 ## What it does
 
-- Collects CPU, memory, disk, network metrics from agents across your fleet
-- Stores everything in PostgreSQL with Redis for pub/sub between components
-- Runs anomaly detection through a pluggable AI pipeline (OpenAI-compatible endpoints)
+- Collects CPU, memory, and disk metrics from agents across your fleet
+- Stores metrics and immutable events in PostgreSQL, with Redis caching the latest metric and event state
+- Provides on-demand event analysis through configurable OpenAI-compatible endpoints
 - Delivers live metric streams to the dashboard over WebSocket
 - Lets you replay historical events or time-travel through infrastructure state with snapshots
 
@@ -18,19 +18,18 @@ Three processes ingest host metrics, store events, and run AI analysis — all v
 git clone https://github.com/aadityya4real/sentinel.git
 cd sentinel
 
-docker compose up -d
-
 cp .env.example .env
+docker compose up -d
 ```
 
-Start the three backend processes:
+Start the API server:
 
 ```bash
 cd backend
 go run ./cmd/server   # API server on :8080
-go run ./cmd/agent    # event collector
-go run ./cmd/worker   # AI inference + background processing
 ```
+
+In another terminal, provide the same `SENTINEL_API_TOKEN` to the server and agent, then run `go run ./cmd/agent`. The agent submits host metrics to the API over HTTP. The Go programs read process environment variables; they do not load `.env` automatically. Compose uses the root `.env` for its own substitutions.
 
 Then the frontend:
 
@@ -42,48 +41,46 @@ npm run dev
 
 Dashboard at `http://localhost:5173`.
 
-If you haven't wired up the backend yet, set `VITE_USE_MOCK_DATA=true` in `.env` — the frontend falls back to mock data for every page.
+For a frontend demo without a backend, set `VITE_USE_MOCK_DATA=true` in `frontend/.env`. Mock responses and the mock metric stream are enabled only by this explicit setting.
 
 ## Pages
 
 | Route | What it shows |
 |---|---|
-| `/dashboard` | Fleet overview: host count, live charts, recent events, AI insights card |
+| `/dashboard` | Fleet overview: host count, live charts, and recent events |
 | `/hosts` | Full host inventory with search |
 | `/hosts/:hostname` | Single host history: CPU/memory area charts over configurable time range |
 | `/events` | Event timeline with severity filtering (CPU, memory, disk, network, etc.) |
 | `/replay` | Filter and review past events by time range |
-| `/time-machine` | Animated timeline slider — scrub through the last 2 hours of host snapshots with comparison views |
+| `/time-machine` | Animated timeline slider for comparing host state at historical times |
 | `/ai` | Type a hostname and time window, get a natural-language analysis of what happened |
 | `/settings` | App config: API URL, refresh interval, version info |
 
 ## Backend structure
 
-Three binaries share the same Go module:
+The server and agent share the same Go module:
 
 ```
 backend/
-├── cmd/server/      REST API (Chi router), WebSocket hub, auth middleware
-├── cmd/agent/       Host-level metric collection via gopsutil
-└── cmd/worker/      AI inference dispatch + alert evaluation
+├── cmd/server/      HTTP API and WebSocket hub
+└── cmd/agent/       Host-level metric collection and authenticated HTTP submission
     internal/
+        ├── agent/       Host metric collection types and collectors
         ├── ai/          OpenAI-compatible endpoint integration
-        ├── alert/       Rule-based alerting
         ├── api/         HTTP handlers per route
-        ├── auth/        Token validation middleware
         ├── collector/   Metric ingestion from agents
+        ├── config/      Canonical server configuration
         ├── dashboard/   Aggregated queries for the fleet overview
-        ├── database/    PostgreSQL via pgx
-        ├── events/      Domain event types
+        ├── database/    PostgreSQL connection and embedded migrations
+        ├── events/      Validated event ingestion service
         ├── eventstore/  Event persistence layer
         ├── logger/      Zap structured logging
-        ├── metrics/     Host metric types and aggregation
         ├── middleware/  CORS, recovery, logging
         ├── models/      Shared structs
-        ├── redis/       go-redis client + pub/sub channels
+        ├── redis/       go-redis client
         ├── replay/      Historical event retrieval
         ├── server/      HTTP server bootstrap
-        ├── storage/     Object storage interface (local/S3)
+        ├── storage/     PostgreSQL repositories and Redis caches
         ├── timemachine/ Snapshot creation and comparison
         └── websocket/   Broadcast hub for live metric streaming
 ```
@@ -100,15 +97,15 @@ Set `SENTINEL_ALLOWED_ORIGINS` to a comma-separated list of exact browser origin
 
 React 19 + TypeScript, Vite build, TailwindCSS. No Redux or Zustand — TanStack Query handles server state, local state stays in components. Charts are Recharts with custom area/spline rendering. Animations use Framer Motion (page transitions, staggered list entries).
 
-Components fall into four buckets: charts (AreaChartCard, GaugeCard, Sparkline), dashboard (FleetOverviewCards, HostTable, LiveInfrastructureCharts, RecentEventsTimeline), timemachine (TimelineSlider, ReplayControls, SnapshotComparison), and shared UI primitives (Badge, Button, Card, EmptyState, ErrorState, Skeleton, Spinner).
+The dashboard uses `MetricCard`, `InfChart`, and `HostTable`; host details use `AreaChartCard`. Time Machine uses `TimelineSlider`, `ReplayControls`, and `SnapshotComparison` alongside shared UI primitives.
 
 Mock data is in `services/mock/events.ts` and generates timestamped infrastructure events across five fake hosts for development without a running backend.
 
 ## Architecture
 
-Agent collects metrics → forwards to Server via gRPC/HTTP → Server writes to PostgreSQL and publishes to Redis pub/sub → Dashboard subscribes via WebSocket → AI Worker analyzes events in parallel.
+Agent submits metrics over authenticated HTTP → API validates and writes metrics/events to PostgreSQL, updates Redis latest-state caches, and broadcasts metrics to WebSocket clients → Dashboard renders current and historical infrastructure state. AI analysis is an on-demand API operation over the event store; Replay and Time Machine also query that store.
 
-Event replay pulls from the PostgreSQL event store. Time Machine takes periodic snapshots and lets you compare two points in time.
+Event replay and Time Machine query the PostgreSQL infrastructure event store to reconstruct and compare historical state.
 
 ## Development
 

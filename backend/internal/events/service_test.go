@@ -30,12 +30,35 @@ func (s *storeStub) ListLatest(_ context.Context, _ eventstore.Filter) ([]events
 type cacheStub struct {
 	event models.Event
 	calls int
+	err   error
 }
 
 func (s *cacheStub) Store(_ context.Context, event models.Event) error {
 	s.event = event
 	s.calls++
-	return nil
+	return s.err
+}
+
+func TestCollectorCollectSucceedsWhenRedisCacheFails(t *testing.T) {
+	store := &storeStub{}
+	cache := &cacheStub{err: context.DeadlineExceeded}
+	collector, err := NewCollector(store, cache)
+	if err != nil {
+		t.Fatalf("NewCollector() error = %v", err)
+	}
+
+	stored, err := collector.Collect(context.Background(), models.Event{
+		Type:       "infrastructure.cpu.changed",
+		Hostname:   "node-01",
+		OccurredAt: time.Now(),
+		Payload:    []byte(`{"usage":90}`),
+	})
+	if err != nil {
+		t.Fatalf("Collect() error = %v, want durable append to succeed", err)
+	}
+	if stored.ID != 7 || store.calls != 1 || cache.calls != 1 {
+		t.Fatalf("stored=%+v durable calls=%d cache calls=%d", stored, store.calls, cache.calls)
+	}
 }
 
 func TestCollectorCollectStoresAndCachesEvent(t *testing.T) {

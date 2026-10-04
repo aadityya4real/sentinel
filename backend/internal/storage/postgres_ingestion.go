@@ -1,4 +1,3 @@
-// Package storage provides PostgreSQL and Redis persistence for Sentinel metrics.
 package storage
 
 import (
@@ -7,30 +6,40 @@ import (
 	"fmt"
 
 	"github.com/aadityya4real/sentinel/backend/internal/agent"
+	"github.com/aadityya4real/sentinel/backend/internal/eventstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PostgreSQLMetricsRepository stores infrastructure metric events in PostgreSQL.
-type PostgreSQLMetricsRepository struct {
+// PostgreSQLIngestionStore commits each metric together with its immutable event.
+type PostgreSQLIngestionStore struct {
 	pool *pgxpool.Pool
 }
 
-// NewPostgreSQLMetricsRepository creates a repository backed by the supplied pool.
-func NewPostgreSQLMetricsRepository(pool *pgxpool.Pool) (*PostgreSQLMetricsRepository, error) {
+// NewPostgreSQLIngestionStore creates an ingestion store backed by PostgreSQL.
+func NewPostgreSQLIngestionStore(pool *pgxpool.Pool) (*PostgreSQLIngestionStore, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("PostgreSQL pool is required")
 	}
-	return &PostgreSQLMetricsRepository{pool: pool}, nil
+	return &PostgreSQLIngestionStore{pool: pool}, nil
 }
 
-// Store inserts a metric event or updates an exact retry from the same host and collection time.
-func (r *PostgreSQLMetricsRepository) Store(ctx context.Context, metrics agent.Metrics) error {
+// StoreMetricAndEvent atomically upserts a metric and inserts its corresponding event.
+func (s *PostgreSQLIngestionStore) StoreMetricAndEvent(ctx context.Context, metrics agent.Metrics, event eventstore.NewEvent) error {
+	if err := event.Validate(); err != nil {
+		return fmt.Errorf("validate metric event: %w", err)
+	}
 	disks, err := json.Marshal(metrics.Disks)
 	if err != nil {
 		return fmt.Errorf("marshal disk usage: %w", err)
 	}
 
-	_, err = r.pool.Exec(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin metric ingestion transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `
 		INSERT INTO infrastructure_metrics (
 			hostname, operating_system, uptime_seconds, collected_at, cpu_usage_percent,
 			memory_total_bytes, memory_used_bytes, memory_available_bytes, memory_used_percent, disks
@@ -57,6 +66,26 @@ func (r *PostgreSQLMetricsRepository) Store(ctx context.Context, metrics agent.M
 	)
 	if err != nil {
 		return fmt.Errorf("upsert infrastructure metrics: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO infrastructure_events (
+			event_key, event_type, subject_type, subject_id, occurred_at, payload
+		) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (event_key) DO NOTHING`,
+		event.Key,
+		event.Type,
+		event.SubjectType,
+		event.SubjectID,
+		event.OccurredAt,
+		event.Payload,
+	)
+	if err != nil {
+		return fmt.Errorf("insert infrastructure event: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit metric ingestion transaction: %w", err)
 	}
 	return nil
 }

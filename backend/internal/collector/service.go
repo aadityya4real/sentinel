@@ -16,11 +16,6 @@ import (
 
 const maxInt64 = uint64(^uint64(0) >> 1)
 
-// MetricsRepository persists immutable infrastructure metric events.
-type MetricsRepository interface {
-	Store(ctx context.Context, metrics agent.Metrics) error
-}
-
 // ErrCacheMiss is returned when a requested entry does not exist in the cache.
 var ErrCacheMiss = errors.New("cache miss")
 
@@ -30,9 +25,9 @@ type LatestMetricsCache interface {
 	Get(ctx context.Context, hostname string) (agent.Metrics, error)
 }
 
-// EventAppender appends immutable infrastructure events to the event store.
-type EventAppender interface {
-	Append(ctx context.Context, event eventstore.NewEvent) (eventstore.Event, error)
+// IngestionStore atomically persists a metric and its corresponding event.
+type IngestionStore interface {
+	StoreMetricAndEvent(ctx context.Context, metrics agent.Metrics, event eventstore.NewEvent) error
 }
 
 // MetricBroadcaster fans out freshly collected metrics to live subscribers.
@@ -47,19 +42,15 @@ type Recorder interface {
 
 // Service coordinates validation and storage of metrics received from agents.
 type Service struct {
-	repository MetricsRepository
-	events     EventAppender
-	cache      LatestMetricsCache
-	broadcast  MetricBroadcaster
+	store     IngestionStore
+	cache     LatestMetricsCache
+	broadcast MetricBroadcaster
 }
 
 // NewService creates a metric collection service from the supplied storage dependencies.
-func NewService(repository MetricsRepository, events EventAppender, cache LatestMetricsCache, broadcast MetricBroadcaster) (*Service, error) {
-	if repository == nil {
-		return nil, errors.New("metrics repository is required")
-	}
-	if events == nil {
-		return nil, errors.New("event appender is required")
+func NewService(store IngestionStore, cache LatestMetricsCache, broadcast MetricBroadcaster) (*Service, error) {
+	if store == nil {
+		return nil, errors.New("PostgreSQL ingestion store is required")
 	}
 	if cache == nil {
 		return nil, errors.New("latest metrics cache is required")
@@ -67,30 +58,27 @@ func NewService(repository MetricsRepository, events EventAppender, cache Latest
 	if broadcast == nil {
 		return nil, errors.New("metric broadcaster is required")
 	}
-	return &Service{repository: repository, events: events, cache: cache, broadcast: broadcast}, nil
+	return &Service{store: store, cache: cache, broadcast: broadcast}, nil
 }
 
-// Record validates a metric event, persists it, and refreshes the latest host snapshot.
+// Record validates and atomically persists a metric and event, then refreshes best-effort projections.
 func (s *Service) Record(ctx context.Context, metrics agent.Metrics) error {
 	if err := Validate(metrics); err != nil {
 		return err
-	}
-	if err := s.repository.Store(ctx, metrics); err != nil {
-		return fmt.Errorf("store metric event: %w", err)
 	}
 	event, err := newMetricsCollectedEvent(metrics)
 	if err != nil {
 		return fmt.Errorf("create metric event: %w", err)
 	}
-	if _, err := s.events.Append(ctx, event); err != nil {
-		return fmt.Errorf("append metric event: %w", err)
+	if err := s.store.StoreMetricAndEvent(ctx, metrics, event); err != nil {
+		return fmt.Errorf("store metric and event transaction: %w", err)
 	}
-	if err := s.cache.Store(ctx, metrics); err != nil {
-		return fmt.Errorf("cache latest metric event: %w", err)
-	}
+	// PostgreSQL is the source of truth. Cache and WebSocket failures are
+	// best-effort projection failures and must not make a durable write look lost.
+	_ = s.cache.Store(ctx, metrics)
 	// Broadcasting is best-effort. Durable storage and the latest-state cache
-	// already succeeded, so client notification failure must not turn an accepted
-	// metric into an HTTP error.
+	// are independent of client notification, so notification failure does not
+	// turn an accepted metric into an HTTP error.
 	_ = s.broadcast.Publish(ctx, metrics)
 	return nil
 }
